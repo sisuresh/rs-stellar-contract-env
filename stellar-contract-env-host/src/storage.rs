@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
-use crate::xdr::ScVal;
-use crate::{ContractID, HostError};
+use crate::xdr::{Hash, ScVal};
+use crate::HostError;
 use im_rc::OrdMap;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Key {
-    pub contract_id: ContractID,
+    pub contract_id: Hash,
     pub key: ScVal,
 }
 

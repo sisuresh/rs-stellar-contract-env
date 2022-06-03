@@ -6,12 +6,13 @@ use core::cmp::Ordering;
 use core::fmt::Debug;
 use im_rc::{OrdMap, Vector};
 use std::num::TryFromIntError;
+use stellar_contract_env_common::xdr::Hash;
 
 use crate::storage::{Key, Storage};
 use crate::weak_host::WeakHost;
 
+use crate::xdr;
 use crate::xdr::{ScMap, ScMapEntry, ScObject, ScStatic, ScStatus, ScStatusType, ScVal, ScVec};
-use crate::{xdr, ContractID};
 use std::rc::Rc;
 
 use crate::host_object::{HostMap, HostObj, HostObject, HostObjectType, HostVal, HostVec};
@@ -59,7 +60,7 @@ impl From<BitSetError> for HostError {
 /// with [`Host::push_frame`].
 #[derive(Clone)]
 pub(crate) struct Frame {
-    pub(crate) contract_id: ContractID,
+    pub(crate) contract_id: Hash,
     // Other activation-frame / execution-context values here.
 }
 
@@ -131,7 +132,7 @@ impl Host {
 
     /// Returns [`ContractID`] from top of context stack, panicking if the stack
     /// is empty.
-    fn get_current_contract_id(&self) -> ContractID {
+    fn get_current_contract_id(&self) -> Hash {
         self.with_current_frame(|frame| frame.contract_id.clone())
     }
 

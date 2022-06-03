@@ -1,10 +1,10 @@
 mod dispatch;
 mod func_info;
 
-use crate::{host::Frame, ContractID, HostError};
+use crate::{host::Frame, HostError};
 
 use super::{
-    xdr::{ScVal, ScVec},
+    xdr::{Hash, ScVal, ScVec},
     Host, RawVal,
 };
 use func_info::HOST_FUNCTIONS;
@@ -111,16 +111,12 @@ impl ImportResolver for Host {
 #[derive(Clone)]
 pub struct Vm {
     #[allow(dead_code)]
-    contract_id: ContractID,
+    contract_id: Hash,
     instance: ModuleRef, // this is a cloneable Rc<ModuleInstance>
 }
 
 impl Vm {
-    pub fn new(
-        host: &Host,
-        contract_id: ContractID,
-        module_wasm_code: &[u8],
-    ) -> Result<Self, HostError> {
+    pub fn new(host: &Host, contract_id: Hash, module_wasm_code: &[u8]) -> Result<Self, HostError> {
         let module = Module::from_buffer(module_wasm_code)?;
         module.deny_floating_point()?;
         let not_started_instance = ModuleInstance::new(&module, host)?;
