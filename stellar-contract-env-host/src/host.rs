@@ -182,7 +182,7 @@ impl Host {
 
     pub(crate) fn from_host_val(&self, val: RawVal) -> Result<ScVal, HostError> {
         if val.is_u63() {
-            Ok(ScVal::U63(unsafe { val.unchecked_as_u63() } as u64))
+            Ok(ScVal::U63(unsafe { val.unchecked_as_u63() }))
         } else {
             match val.get_tag() {
                 Tag::U32 => Ok(ScVal::U32(unsafe {
@@ -207,7 +207,7 @@ impl Host {
                 Tag::Object => unsafe {
                     let ob = <Object as RawValConvertible>::unchecked_from_val(val);
                     let scob = self.from_host_obj(ob)?;
-                    Ok(ScVal::Object(Some(Box::new(scob))))
+                    Ok(ScVal::Object(Some(scob)))
                 },
                 Tag::Symbol => {
                     let sym: Symbol =
@@ -234,9 +234,9 @@ impl Host {
 
     pub(crate) fn to_host_val(&self, v: &ScVal) -> Result<HostVal, HostError> {
         let ok = match v {
-            ScVal::U63(u) => {
-                if *u <= (i64::MAX as u64) {
-                    unsafe { RawVal::unchecked_from_u63(*u as i64) }
+            ScVal::U63(i) => {
+                if *i >= 0 {
+                    unsafe { RawVal::unchecked_from_u63(*i) }
                 } else {
                     return Err(HostError::General("ScvU63 > i64::MAX"));
                 }
@@ -275,7 +275,6 @@ impl Host {
             self.unchecked_visit_val_obj(ob.into(), |ob| match ob {
                 None => Err(HostError::General("object not found")),
                 Some(ho) => match ho {
-                    HostObject::Box(v) => Ok(ScObject::Box(Box::new(self.from_host_val(v.val)?))),
                     HostObject::Vec(vv) => {
                         let mut sv = Vec::new();
                         for e in vv.iter() {
@@ -294,17 +293,7 @@ impl Host {
                     }
                     HostObject::U64(u) => Ok(ScObject::U64(*u)),
                     HostObject::I64(i) => Ok(ScObject::I64(*i)),
-                    HostObject::Str(s) => Ok(ScObject::String(s.as_bytes().try_into()?)),
                     HostObject::Bin(b) => Ok(ScObject::Binary(b.clone().try_into()?)),
-                    HostObject::BigInt(_) => todo!(),
-                    HostObject::BigRat(_) => todo!(),
-                    HostObject::LedgerKey(_) => todo!(),
-                    HostObject::Operation(_) => todo!(),
-                    HostObject::OperationResult(_) => todo!(),
-                    HostObject::Transaction(_) => todo!(),
-                    HostObject::Asset(_) => todo!(),
-                    HostObject::Price(_) => todo!(),
-                    HostObject::AccountID(_) => todo!(),
                 },
             })
         }
@@ -312,10 +301,6 @@ impl Host {
 
     pub(crate) fn to_host_obj(&self, ob: &ScObject) -> Result<HostObj, HostError> {
         match ob {
-            ScObject::Box(b) => {
-                let hv = self.to_host_val(b)?;
-                self.add_host_object(hv)
-            }
             ScObject::Vec(v) => {
                 let mut vv = Vector::new();
                 for e in v.0.iter() {
@@ -334,35 +319,7 @@ impl Host {
             }
             ScObject::U64(u) => self.add_host_object(*u),
             ScObject::I64(i) => self.add_host_object(*i),
-            ScObject::String(s) => {
-                let ss = match String::from_utf8(s.clone().into()) {
-                    Ok(ss) => ss,
-                    Err(_) => return Err(HostError::General("non-UTF-8 in ScoString")),
-                };
-                self.add_host_object(ss)
-            }
             ScObject::Binary(b) => self.add_host_object::<Vec<u8>>(b.clone().into()),
-
-            ScObject::Bigint(_) => todo!(),
-            ScObject::Bigrat(_) => todo!(),
-
-            ScObject::Ledgerkey(None) => Err(HostError::General("missing ScoLedgerKey")),
-            ScObject::Ledgerkey(Some(lk)) => self.add_host_object(lk.clone()),
-
-            ScObject::Operation(None) => Err(HostError::General("missing ScoOperation")),
-            ScObject::Operation(Some(op)) => self.add_host_object(op.clone()),
-
-            ScObject::OperationResult(None) => {
-                Err(HostError::General("missing ScoOperationResult"))
-            }
-            ScObject::OperationResult(Some(o)) => self.add_host_object(o.clone()),
-
-            ScObject::Transaction(None) => Err(HostError::General("missing ScoTransaction")),
-            ScObject::Transaction(Some(t)) => self.add_host_object(t.clone()),
-
-            ScObject::Asset(a) => self.add_host_object(a.clone()),
-            ScObject::Price(p) => self.add_host_object(p.clone()),
-            ScObject::Accountid(a) => self.add_host_object(a.clone()),
         }
     }
 
@@ -416,7 +373,6 @@ impl EnvBase for Host {
         let new_weak = new_host.get_weak();
         for hobj in new_host.0.objects.borrow_mut().iter_mut() {
             match hobj {
-                HostObject::Box(v) => v.env = new_weak.clone(),
                 HostObject::Vec(vs) => {
                     vs.iter_mut().for_each(|v| v.env = new_weak.clone());
                 }

@@ -72,8 +72,8 @@ fn vec_as_seen_by_host() -> Result<(), ()> {
     let scvec1: ScVec = ScVec(vec![ScVal::U32(1)].try_into()?);
     let scobj0: ScObject = ScObject::Vec(scvec0);
     let scobj1: ScObject = ScObject::Vec(scvec1);
-    let scval0 = ScVal::Object(Some(Box::new(scobj0)));
-    let scval1 = ScVal::Object(Some(Box::new(scobj1)));
+    let scval0 = ScVal::Object(Some(scobj0));
+    let scval1 = ScVal::Object(Some(scobj1));
     let val0 = host.to_host_val(&scval0).unwrap();
     let val1 = host.to_host_val(&scval1).unwrap();
     assert!(val0.val.is::<Object>());
