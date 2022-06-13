@@ -167,6 +167,8 @@ macro_rules! call_macro_with_all_host_functions {
                 {"$C", fn binary_insert(x:Object, i:RawVal, v:RawVal) -> Object}
                 {"$D", fn binary_append(v1:Object, v2:Object) -> Object}
                 {"$E", fn binary_slice(v:Object, i:RawVal, l:RawVal) -> Object}
+                {"$F", fn create_contract(v: Object, salt: Object, key: Object, sig: Object) -> Object}
+                {"$G", fn create_contract_using_parent_id(v: Object, salt: Object) -> Object}
             }
 
             mod hash "h" {
