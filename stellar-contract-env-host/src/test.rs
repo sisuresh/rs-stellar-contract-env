@@ -1,5 +1,5 @@
 use crate::{
-    xdr::{ScObject, ScObjectType, ScVal, ScVec},
+    xdr::{ScObject, ScObjectType, ScVal, ScVec, LedgerKey, LedgerKeyContractData},
     Host, IntoEnvVal, Object, RawVal, Tag,
 };
 use im_rc::OrdMap;
@@ -14,8 +14,7 @@ use crate::Vm;
 #[cfg(feature = "vm")]
 use crate::{
     xdr::{
-        ContractDataEntry, Hash, LedgerEntry, LedgerEntryData, LedgerEntryExt, LedgerKey,
-        LedgerKeyContractData, ScStatic,
+        ContractDataEntry, Hash, LedgerEntry, LedgerEntryData, LedgerEntryExt, ScStatic,
     },
     Symbol,
 };
@@ -488,7 +487,7 @@ fn ed25519_verify_test() {
 /// create contract tests
 #[test]
 fn create_contract_test() {
-    use crate::storage::{AccessType, Footprint, Key, Storage};
+    use crate::storage::{AccessType, Footprint, Storage};
     use crate::xdr;
     use crate::xdr::{ScObject, ScStatic, ScVal};
     use ed25519_dalek::{
@@ -533,10 +532,10 @@ fn create_contract_test() {
     let hash = xdr::Hash(Sha256::digest(buf).try_into().expect("invalid hash"));
     let hash_copy = hash.clone();
     let key = ScVal::Static(ScStatic::LedgerKeyContractCodeWasm);
-    let storage_key = Key {
+    let storage_key = LedgerKey::ContractData(LedgerKeyContractData {
         contract_id: hash,
         key,
-    };
+    });
 
     let mut footprint = Footprint::default();
     footprint.record_access(&storage_key, AccessType::ReadWrite);
