@@ -1267,7 +1267,7 @@ impl CheckedEnv for Host {
         let salt_val = self.visit_obj(salt, |bin: &Vec<u8>| {
             let arr: [u8; 32] = bin.as_slice().try_into().map_err(|_| {
                 HostError::WithStatus(
-                    String::from("invalid salt"),
+                    String::from(["invalid salt. len=", &bin.len().to_string()].concat()),
                     ScStatus::HostObjectError(ScHostObjErrorCode::UnexpectedType),
                 )
             })?;
