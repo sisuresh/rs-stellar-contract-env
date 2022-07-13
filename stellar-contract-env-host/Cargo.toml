@@ -25,6 +25,7 @@ assert_matches = "1.5.0"
 
 [features]
 vm = ["wasmi", "parity-wasm", "stellar-contract-env-common/vm"]
+serde = ["stellar-contract-env-common/serde"]
 testutils = []
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
