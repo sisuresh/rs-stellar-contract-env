@@ -4,14 +4,28 @@ use crate::native_contract::token::public_types::Identifier;
 use crate::HostError;
 use soroban_env_common::{CheckedEnv, Symbol, TryIntoVal};
 
-pub(crate) fn approve(
+pub(crate) fn iAllowance(
     e: &Host,
     from: Identifier,
     to: Identifier,
     amount: BigInt,
 ) -> Result<(), HostError> {
     let mut topics = Vec::new(e)?;
-    topics.push(Symbol::from_str("approve"))?;
+    topics.push(Symbol::from_str("iAllowance"))?;
+    topics.push(from)?;
+    topics.push(to)?;
+    e.contract_event(topics.into(), amount.try_into_val(e)?)?;
+    Ok(())
+}
+
+pub(crate) fn dAllowance(
+    e: &Host,
+    from: Identifier,
+    to: Identifier,
+    amount: BigInt,
+) -> Result<(), HostError> {
+    let mut topics = Vec::new(e)?;
+    topics.push(Symbol::from_str("dAllowance"))?;
     topics.push(from)?;
     topics.push(to)?;
     e.contract_event(topics.into(), amount.try_into_val(e)?)?;

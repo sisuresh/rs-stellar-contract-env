@@ -93,7 +93,7 @@ impl<'a> TestToken<'a> {
             .try_into_val(self.host)?)
     }
 
-    pub(crate) fn approve(
+    pub(crate) fn iAllowance(
         &self,
         from: &TestSigner,
         nonce: BigInt,
@@ -103,7 +103,7 @@ impl<'a> TestToken<'a> {
         let signature = sign_args(
             self.host,
             from,
-            "approve",
+            "iAllowance",
             &self.id,
             host_vec![
                 self.host,
@@ -118,7 +118,38 @@ impl<'a> TestToken<'a> {
             .host
             .call(
                 self.id.clone().into(),
-                Symbol::from_str("approve").into(),
+                Symbol::from_str("iAllowance").into(),
+                host_vec![self.host, signature, nonce, spender, amount].into(),
+            )?
+            .try_into()?)
+    }
+
+    pub(crate) fn dAllowance(
+        &self,
+        from: &TestSigner,
+        nonce: BigInt,
+        spender: Identifier,
+        amount: BigInt,
+    ) -> Result<(), HostError> {
+        let signature = sign_args(
+            self.host,
+            from,
+            "dAllowance",
+            &self.id,
+            host_vec![
+                self.host,
+                from.get_identifier(self.host),
+                nonce.clone(),
+                spender.clone(),
+                amount.clone()
+            ],
+        );
+
+        Ok(self
+            .host
+            .call(
+                self.id.clone().into(),
+                Symbol::from_str("dAllowance").into(),
                 host_vec![self.host, signature, nonce, spender, amount].into(),
             )?
             .try_into()?)

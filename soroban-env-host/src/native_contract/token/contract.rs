@@ -42,7 +42,19 @@ pub trait TokenTrait {
 
     fn allowance(e: &Host, from: Identifier, spender: Identifier) -> Result<BigInt, HostError>;
 
-    fn approve(
+    // If an allowance does not exist, set allowance to "amount".
+    //TODO:change to increase_allowance
+    fn iAllowance(
+        e: &Host,
+        from: Signature,
+        nonce: BigInt,
+        spender: Identifier,
+        amount: BigInt,
+    ) -> Result<(), HostError>;
+
+    // If amount is greater than the existing allowance, set the allowance to 0.
+    //TODO:decrease_allowance
+    fn dAllowance(
         e: &Host,
         from: Signature,
         nonce: BigInt,
@@ -199,8 +211,7 @@ impl TokenTrait for Token {
         read_allowance(&e, from, spender)
     }
 
-    // Metering: covered by components
-    fn approve(
+    fn iAllowance(
         e: &Host,
         from: Signature,
         nonce: BigInt,
@@ -215,15 +226,69 @@ impl TokenTrait for Token {
                 amount
             ));
         }
+
         let from_id = from.get_identifier(&e)?;
         let mut args = Vec::new(e)?;
-        args.push(from.get_identifier(&e)?)?;
+        args.push(from_id.clone())?;
         args.push(nonce.clone())?;
         args.push(spender.clone())?;
         args.push(amount.clone())?;
-        check_auth(&e, from, nonce, Symbol::from_str("approve"), args)?;
-        write_allowance(&e, from_id.clone(), spender.clone(), amount.clone())?;
-        event::approve(e, from_id, spender, amount)?;
+        check_auth(&e, from, nonce, Symbol::from_str("iAllowance"), args)?;
+
+        let allowance = read_allowance(&e, from_id.clone(), spender.clone())?;
+        write_allowance(
+            &e,
+            from_id.clone(),
+            spender.clone(),
+            (allowance + amount.clone())?,
+        )?;
+        //TODO:Update events
+        event::iAllowance(e, from_id, spender, amount)?;
+        Ok(())
+    }
+
+    fn dAllowance(
+        e: &Host,
+        from: Signature,
+        nonce: BigInt,
+        spender: Identifier,
+        amount: BigInt,
+    ) -> Result<(), HostError> {
+        if amount.compare(&BigInt::from_u64(e, 0)?)? == Ordering::Less {
+            return Err(err!(
+                e,
+                ContractError::NegativeAmountError,
+                "negative amount is not allowed: {}",
+                amount
+            ));
+        }
+
+        let from_id = from.get_identifier(&e)?;
+        let mut args = Vec::new(e)?;
+        args.push(from_id.clone())?;
+        args.push(nonce.clone())?;
+        args.push(spender.clone())?;
+        args.push(amount.clone())?;
+        check_auth(&e, from, nonce, Symbol::from_str("dAllowance"), args)?;
+
+        let allowance = read_allowance(&e, from_id.clone(), spender.clone())?;
+        if amount.compare(&allowance)? == Ordering::Less {
+            write_allowance(
+                &e,
+                from_id.clone(),
+                spender.clone(),
+                (allowance - amount.clone())?,
+            )?;
+        } else {
+            write_allowance(
+                &e,
+                from_id.clone(),
+                spender.clone(),
+                BigInt::from_u64(e, 0)?,
+            )?;
+        }
+        //TODO:Update events
+        event::dAllowance(e, from_id, spender, amount)?;
         Ok(())
     }
 

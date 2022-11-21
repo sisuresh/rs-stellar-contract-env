@@ -905,7 +905,7 @@ fn test_transfer_with_allowance() {
 
     // Allow 10_000_000 units of token to be transferred from user by user 3.
     token
-        .approve(
+        .iAllowance(
             &user,
             token.nonce(user.get_identifier(&test.host)).unwrap(),
             user_3.get_identifier(&test.host),
@@ -1628,7 +1628,7 @@ fn test_auth_rejected_with_incorrect_nonce() {
 
     // Bump user's nonce and approve some amount to cover xfer_from below.
     token
-        .approve(
+        .iAllowance(
             &user,
             BigInt::from_u64(&test.host, 0).unwrap(),
             user_2.get_identifier(&test.host),
@@ -1654,7 +1654,7 @@ fn test_auth_rejected_with_incorrect_nonce() {
     assert_eq!(
         to_contract_err(
             token
-                .approve(
+                .iAllowance(
                     &user,
                     BigInt::from_u64(&test.host, 2).unwrap(),
                     user_2.get_identifier(&test.host),
@@ -2140,7 +2140,22 @@ fn test_negative_amounts_are_not_allowed() {
     assert_eq!(
         to_contract_err(
             token
-                .approve(
+                .iAllowance(
+                    &user,
+                    token.nonce(user.get_identifier(&test.host)).unwrap(),
+                    user_2.get_identifier(&test.host),
+                    BigInt::from_i64(&test.host, -1).unwrap(),
+                )
+                .err()
+                .unwrap()
+        ),
+        ContractError::NegativeAmountError
+    );
+
+    assert_eq!(
+        to_contract_err(
+            token
+                .dAllowance(
                     &user,
                     token.nonce(user.get_identifier(&test.host)).unwrap(),
                     user_2.get_identifier(&test.host),
@@ -2154,7 +2169,7 @@ fn test_negative_amounts_are_not_allowed() {
 
     // Approve some balance before doing the negative xfer_from.
     token
-        .approve(
+        .iAllowance(
             &user,
             token.nonce(user.get_identifier(&test.host)).unwrap(),
             user_2.get_identifier(&test.host),
