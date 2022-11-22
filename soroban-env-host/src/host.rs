@@ -10,22 +10,27 @@ use im_rc::{OrdMap, Vector};
 use num_bigint::Sign;
 use sha2::{Digest, Sha256};
 use soroban_env_common::{
-    xdr::{
-        AccountId, Asset, ContractCodeEntry, ContractDataEntry, ContractEvent, ContractEventBody,
-        ContractEventType, ContractEventV0, ContractId, CreateContractArgs, ExtensionPoint, Hash,
-        HashIdPreimage, HostFunction, HostFunctionType, InstallContractCodeArgs, LedgerEntry,
-        LedgerEntryData, LedgerKey, LedgerKeyContractCode, ScBigInt, ScContractCode,
-        ScHostContextErrorCode, ScHostFnErrorCode, ScHostObjErrorCode, ScHostStorageErrorCode,
-        ScHostValErrorCode, ScMap, ScMapEntry, ScObject, ScStatusType, ScVal, ScVec,
-        ThresholdIndexes,
-    },
     EnvVal, InvokerType, Status, TryConvert, TryFromVal, TryIntoVal, VmCaller, VmCallerCheckedEnv,
 };
+
+use soroban_env_common::xdr::{
+    AccountId, Asset, ContractEvent, ContractEventBody, ContractEventType, ContractEventV0,
+    ExtensionPoint, Hash, ScStatus, ScStatusType, ThresholdIndexes,
+};
+
+#[cfg(any(test, feature = "testutils"))]
+use soroban_env_common::xdr::ScUnknownErrorCode;
 
 use crate::budget::{Budget, CostType};
 use crate::events::{DebugError, DebugEvent, Events};
 use crate::storage::Storage;
 use crate::weak_host::WeakHost;
+
+use crate::xdr::{
+    ContractDataEntry, HostFunction, LedgerEntry, LedgerEntryData, LedgerEntryExt, LedgerKey,
+    ScBigInt, ScContractCode, ScHostContextErrorCode, ScHostFnErrorCode, ScHostObjErrorCode,
+    ScHostStorageErrorCode, ScHostValErrorCode, ScMap, ScMapEntry, ScObject, ScVal, ScVec,
+};
 
 use crate::host_object::{HostMap, HostObj, HostObject, HostObjectType, HostVal, HostVec};
 #[cfg(feature = "vm")]
@@ -103,7 +108,7 @@ impl TestContractFrame {
 pub(crate) enum Frame {
     #[cfg(feature = "vm")]
     ContractVM(Rc<Vm>, Symbol),
-    HostFunction(HostFunctionType),
+    HostFunction(HostFunction),
     Token(Hash, Symbol),
     #[cfg(any(test, feature = "testutils"))]
     TestContract(TestContractFrame),
@@ -211,11 +216,6 @@ impl Host {
 
     pub fn set_source_account(&self, source_account: AccountId) {
         *self.0.source_account.borrow_mut() = Some(source_account);
-    }
-
-    #[cfg(any(test, feature = "testutils"))]
-    pub fn remove_source_account(&self) {
-        *self.0.source_account.borrow_mut() = None;
     }
 
     pub fn source_account(&self) -> Result<AccountId, HostError> {
@@ -717,67 +717,41 @@ impl Host {
     }
 
     // Notes on metering: this is covered by the called components.
-    fn create_contract_with_id(
+    pub fn create_contract_with_id(
         &self,
-        contract_id: Object,
-        contract_source: ScContractCode,
+        contract: ScContractCode,
+        id_obj: Object,
     ) -> Result<(), HostError> {
-        let new_contract_id = self.hash_from_obj_input("id_obj", contract_id)?;
+        let new_contract_id = self.hash_from_obj_input("id_obj", id_obj)?;
         let storage_key =
-            self.contract_source_ledger_key(new_contract_id.metered_clone(&self.0.budget)?);
+            self.contract_code_ledger_key(new_contract_id.metered_clone(&self.0.budget)?);
         if self.0.storage.borrow_mut().has(&storage_key)? {
             return Err(self.err_general("Contract already exists"));
         }
-        // Make sure the contract code exists. With immutable contracts and
-        // without this check it would be possible to accidentally create a
-        // contract that never may be invoked (just by providing a bad hash).
-        if let ScContractCode::WasmRef(wasm_hash) = &contract_source {
-            let wasm_storage_key =
-                self.contract_code_ledger_key(wasm_hash.metered_clone(&self.0.budget)?);
-            if !self.0.storage.borrow_mut().has(&wasm_storage_key)? {
-                return Err(self.err_general("Contract code was not installed"));
-            }
-        }
-        self.store_contract_source(contract_source, new_contract_id, &storage_key)?;
+        self.store_contract_code(contract, new_contract_id, &storage_key)?;
         Ok(())
     }
 
-    fn maybe_initialize_asset_token(
+    pub fn create_contract_with_id_preimage(
         &self,
-        contract_id: Object,
-        id_preimage: HashIdPreimage,
-    ) -> Result<(), HostError> {
-        if let HashIdPreimage::ContractIdFromAsset(asset_preimage) = id_preimage {
-            let mut asset_bytes: Vec<u8> = Default::default();
-            self.metered_write_xdr(&asset_preimage.asset, &mut asset_bytes)?;
-            self.call_n(
-                contract_id,
-                Symbol::from_str("init_asset"),
-                &[self.add_host_object(asset_bytes)?.into()],
-                false,
-            )?;
-            Ok(())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn create_contract_with_id_preimage(
-        &self,
-        contract_source: ScContractCode,
-        id_preimage: HashIdPreimage,
+        contract: ScContractCode,
+        id_preimage: Vec<u8>,
     ) -> Result<Object, HostError> {
-        let id_arr: [u8; 32] = self.metered_hash_xdr(&id_preimage)?;
-        let id_obj = self.add_host_object(id_arr.to_vec())?.to_object();
-        self.create_contract_with_id(id_obj, contract_source.metered_clone(self.budget_ref())?)?;
-        self.maybe_initialize_asset_token(id_obj, id_preimage)?;
+        let id_obj = self.compute_hash_sha256(
+            &mut VmCaller::none(),
+            self.add_host_object(id_preimage)?.into(),
+        )?;
+        self.create_contract_with_id(contract, id_obj)?;
         Ok(id_obj)
     }
 
     pub fn get_contract_id_from_asset(&self, asset: Asset) -> Result<Object, HostError> {
         let id_preimage = self.id_preimage_from_asset(asset)?;
-        let id_arr: [u8; 32] = self.metered_hash_xdr(&id_preimage)?;
-        Ok(self.add_host_object(id_arr.to_vec())?.to_object())
+        let id_obj = self.compute_hash_sha256(
+            &mut VmCaller::none(),
+            self.add_host_object(id_preimage)?.into(),
+        )?;
+        Ok(id_obj)
     }
 
     // Notes on metering: this is covered by the called components.
@@ -788,20 +762,15 @@ impl Host {
         args: &[RawVal],
     ) -> Result<RawVal, HostError> {
         // Create key for storage
-        let storage_key = self.contract_source_ledger_key(id.metered_clone(&self.0.budget)?);
-        match self.retrieve_contract_source_from_storage(&storage_key)? {
+        let storage_key = self.contract_code_ledger_key(id.metered_clone(&self.0.budget)?);
+        match self.retrieve_contract_code_from_storage(&storage_key)? {
             #[cfg(feature = "vm")]
-            ScContractCode::WasmRef(wasm_hash) => {
-                let code_entry = self.retrieve_contract_code_from_storage(wasm_hash)?;
-                let vm = Vm::new(
-                    self,
-                    id.metered_clone(&self.0.budget)?,
-                    code_entry.code.as_slice(),
-                )?;
+            ScContractCode::Wasm(wasm) => {
+                let vm = Vm::new(self, id.metered_clone(&self.0.budget)?, wasm.as_slice())?;
                 vm.invoke_function_raw(self, SymbolStr::from(func).as_ref(), args)
             }
             #[cfg(not(feature = "vm"))]
-            ScContractCode::WasmRef(_) => Err(self.err_general("could not dispatch")),
+            ScContractCode::Wasm(_) => Err(self.err_general("could not dispatch")),
             ScContractCode::Token => {
                 self.with_frame(Frame::Token(id.clone(), func.clone()), || {
                     use crate::native_contract::{NativeContract, Token};
@@ -858,7 +827,6 @@ impl Host {
                 return self.with_frame(Frame::TestContract(frame), || {
                     use std::any::Any;
                     use std::panic::{catch_unwind, set_hook, take_hook, AssertUnwindSafe};
-                    use crate::xdr::ScUnknownErrorCode;
                     type PanicVal = Box<dyn Any + Send>;
 
                     // We're directly invoking a native rust contract here,
@@ -929,21 +897,23 @@ impl Host {
     }
 
     // Notes on metering: covered by the called components.
-    fn invoke_function_raw(&self, hf: HostFunction) -> Result<RawVal, HostError> {
-        let hf_type = hf.discriminant();
+    pub fn invoke_function_raw(&self, hf: HostFunction, args: ScVec) -> Result<RawVal, HostError> {
         //TODO: should the create_* methods below return a RawVal instead of Object to avoid this conversion?
         match hf {
-            HostFunction::InvokeContract(args) => {
+            HostFunction::InvokeContract => {
                 if let [ScVal::Object(Some(scobj)), ScVal::Symbol(scsym), rest @ ..] =
                     args.as_slice()
                 {
-                    self.with_frame(Frame::HostFunction(hf_type), || {
+                    self.with_frame(Frame::HostFunction(hf), || {
                         // Metering: conversions to host objects are covered. Cost of collecting
                         // RawVals into Vec is ignored. Since 1. RawVals are cheap to clone 2. the
                         // max number of args is fairly limited.
                         let object = self.to_host_obj(scobj)?.to_object();
                         let symbol = <Symbol>::try_from(scsym)?;
-                        let args = self.scvals_to_rawvals(rest)?;
+                        let args = rest
+                            .iter()
+                            .map(|scv| self.to_host_val(scv).map(|hv| hv.val))
+                            .collect::<Result<Vec<RawVal>, HostError>>()?;
                         // since the `HostFunction` frame must be the bottom of the call stack,
                         // reentry is irrelevant, we always pass in `allow_reentry = false`.
                         self.call_n(object, symbol, &args[..], false)
@@ -955,20 +925,63 @@ impl Host {
                     ))
                 }
             }
-            HostFunction::CreateContract(args) => self
-                .with_frame(Frame::HostFunction(hf_type), || {
-                    self.create_contract(args).map(|obj| <RawVal>::from(obj))
-                }),
-            HostFunction::InstallContractCode(args) => self
-                .with_frame(Frame::HostFunction(hf_type), || {
-                    self.install_contract(args).map(|obj| <RawVal>::from(obj))
-                }),
+            HostFunction::CreateContractWithEd25519 => Err(self.err_status_msg(
+                ScHostFnErrorCode::UnknownError,
+                "CreateContractWithEd25519 is not yet implemented",
+            )),
+            HostFunction::CreateContractWithSourceAccount => {
+                if let [ScVal::Object(Some(c_obj)), ScVal::Object(Some(s_obj))] = args.as_slice() {
+                    self.with_frame(Frame::HostFunction(hf), || {
+                        let contract = self.to_host_obj(c_obj)?.to_object();
+                        let salt = self.to_host_obj(s_obj)?.to_object();
+                        self.create_contract_from_source_account(
+                            &mut VmCaller::none(),
+                            contract,
+                            salt,
+                        )
+                        .map(|obj| <RawVal>::from(obj))
+                    })
+                } else {
+                    Err(self.err_status_msg(
+                        ScHostFnErrorCode::InputArgsWrongLength,
+                        "unexpected arguments to 'CreateContractWithSourceAccount' host function",
+                    ))
+                }
+            }
+            HostFunction::CreateTokenContractWithAsset => {
+                if let [ScVal::Object(Some(a_obj))] = args.as_slice() {
+                    self.with_frame(Frame::HostFunction(hf), || {
+                        let asset_bytes = self.to_host_obj(a_obj)?.to_object();
+                        self.create_token_from_asset(&mut VmCaller::none(), asset_bytes)
+                            .map(|obj| <RawVal>::from(obj))
+                    })
+                } else {
+                    Err(self.err_status_msg(
+                        ScHostFnErrorCode::InputArgsWrongLength,
+                        "unexpected arguments to 'CreateTokenContractWithAsset' host function",
+                    ))
+                }
+            }
+            HostFunction::CreateTokenContractWithSourceAccount => {
+                if let [ScVal::Object(Some(s_obj))] = args.as_slice() {
+                    self.with_frame(Frame::HostFunction(hf), || {
+                        let salt = self.to_host_obj(s_obj)?.to_object();
+                        self.create_token_from_source_account(&mut VmCaller::none(), salt)
+                            .map(|obj| <RawVal>::from(obj))
+                    })
+                } else {
+                    Err(self.err_status_msg(
+                        ScHostFnErrorCode::InputArgsWrongLength,
+                        "unexpected arguments to 'CreateTokenContractWithSourceAccount' host function",
+                    ))
+                }
+            }
         }
     }
 
     // Notes on metering: covered by the called components.
-    pub fn invoke_function(&self, hf: HostFunction) -> Result<ScVal, HostError> {
-        let rv = self.invoke_function_raw(hf)?;
+    pub fn invoke_function(&self, hf: HostFunction, args: ScVec) -> Result<ScVal, HostError> {
+        let rv = self.invoke_function_raw(hf, args)?;
         self.from_host_val(rv)
     }
 
@@ -989,6 +1002,24 @@ impl Host {
         }
     }
 
+    // "testutils" is not covered by budget metering.
+    #[cfg(any(test, feature = "testutils"))]
+    pub fn register_test_contract_wasm(
+        &self,
+        contract_id: Object,
+        contract_wasm: &[u8],
+    ) -> Result<(), HostError> {
+        let contract_code =
+            ScContractCode::Wasm(contract_wasm.try_into().map_err(|_| self.err_general(""))?);
+        self.create_contract_with_id(contract_code, contract_id)
+    }
+
+    // "testutils" is not covered by budget metering.
+    #[cfg(any(test, feature = "testutils"))]
+    pub fn register_test_contract_token(&self, contract_id: Object) -> Result<(), HostError> {
+        self.create_contract_with_id(ScContractCode::Token, contract_id)
+    }
+
     // Writes an arbitrary ledger entry to storage.
     // "testutils" is not covered by budget metering.
     #[cfg(any(test, feature = "testutils"))]
@@ -1004,62 +1035,6 @@ impl Host {
         let data = self.from_host_val(data)?;
         self.record_contract_event(ContractEventType::System, topics, data)?;
         Ok(Status::OK.into())
-    }
-
-    fn create_contract(&self, args: CreateContractArgs) -> Result<Object, HostError> {
-        let id_preimage = match args.contract_id {
-            ContractId::Asset(asset) => self.id_preimage_from_asset(asset)?,
-            ContractId::SourceAccount(salt) => self.id_preimage_from_source_account(salt)?,
-            ContractId::Ed25519PublicKey(key_with_signature) => {
-                let signature_payload_preimage = self.create_contract_args_hash_preimage(
-                    args.source.metered_clone(&self.budget_ref())?,
-                    key_with_signature.salt.metered_clone(self.budget_ref())?,
-                )?;
-                let signature_payload = self.metered_hash_xdr(&signature_payload_preimage)?;
-                self.verify_sig_ed25519_internal(
-                    &signature_payload,
-                    &self.ed25519_pub_key_from_bytes(&key_with_signature.key.0)?,
-                    &self.signature_from_bytes(
-                        "create_contract_sig",
-                        &key_with_signature.signature.0,
-                    )?,
-                )?;
-                self.id_preimage_from_ed25519(key_with_signature.key, key_with_signature.salt)?
-            }
-        };
-        self.create_contract_with_id_preimage(args.source, id_preimage)
-    }
-
-    fn install_contract(&self, args: InstallContractCodeArgs) -> Result<Object, HostError> {
-        let hash_bytes = self.metered_hash_xdr(&args)?;
-        let hash_obj = self.add_host_object(hash_bytes.to_vec())?.to_object();
-        let code_key = LedgerKey::ContractCode(LedgerKeyContractCode {
-            hash: Hash(hash_bytes.metered_clone(self.budget_ref())?),
-        });
-        if !self.0.storage.borrow_mut().has(&code_key)? {
-            self.with_mut_storage(|storage| {
-                let data = LedgerEntryData::ContractCode(ContractCodeEntry {
-                    hash: Hash(hash_bytes),
-                    code: args.code,
-                    ext: ExtensionPoint::V0,
-                });
-                storage.put(&code_key, &Host::ledger_entry_from_data(data))
-            })?;
-        }
-        Ok(hash_obj)
-    }
-
-    pub(crate) fn verify_sig_ed25519_internal(
-        &self,
-        payload: &[u8],
-        public_key: &ed25519_dalek::PublicKey,
-        sig: &ed25519_dalek::Signature,
-    ) -> Result<(), HostError> {
-        use ed25519_dalek::Verifier;
-        self.charge_budget(CostType::VerifyEd25519Sig, payload.len() as u64)?;
-        public_key
-            .verify(payload, &sig)
-            .map_err(|_| self.err_general("Failed ED25519 verification"))
     }
 }
 
@@ -1777,10 +1752,12 @@ impl VmCallerCheckedEnv for Host {
             key: self.from_host_val(k)?,
             val: self.from_host_val(v)?,
         });
-        self.0
-            .storage
-            .borrow_mut()
-            .put(&key, &Host::ledger_entry_from_data(data))?;
+        let val = LedgerEntry {
+            last_modified_ledger_seq: 0,
+            data,
+            ext: LedgerEntryExt::V0,
+        };
+        self.0.storage.borrow_mut().put(&key, &val)?;
         Ok(().into())
     }
 
@@ -1827,18 +1804,102 @@ impl VmCallerCheckedEnv for Host {
     }
 
     // Notes on metering: covered by the components.
+    fn create_contract_from_ed25519(
+        &self,
+        vmcaller: &mut VmCaller<Host>,
+        v: Object,
+        salt: Object,
+        key: Object,
+        sig: Object,
+    ) -> Result<Object, HostError> {
+        Err(self.err_status_msg(
+            ScStatus::HostFunctionError(ScHostFnErrorCode::UnknownError),
+            "not yet implemented",
+        ))
+    }
+
+    // Notes on metering: covered by the components.
     fn create_contract_from_contract(
         &self,
         _vmcaller: &mut VmCaller<Host>,
-        wasm_hash: Object,
+        v: Object,
         salt: Object,
     ) -> Result<Object, HostError> {
         let contract_id = self.get_current_contract_id()?;
         let salt = self.uint256_from_obj_input("salt", salt)?;
 
-        let code = ScContractCode::WasmRef(self.hash_from_obj_input("wasm_hash", wasm_hash)?);
-        let id_preimage = self.id_preimage_from_contract(contract_id, salt)?;
-        self.create_contract_with_id_preimage(code, id_preimage)
+        let wasm = self.visit_obj(v, |b: &Vec<u8>| {
+            Ok(ScContractCode::Wasm(
+                b.try_into()
+                    .map_err(|_| self.err_general("code too large"))?,
+            ))
+        })?;
+        let buf = self.id_preimage_from_contract(contract_id, salt)?;
+        self.create_contract_with_id_preimage(wasm, buf)
+    }
+
+    fn create_contract_from_source_account(
+        &self,
+        _vmcaller: &mut VmCaller<Host>,
+        v: Object,
+        salt: Object,
+    ) -> Result<Object, HostError> {
+        let frames = self.0.context.borrow();
+        if frames.len() > 1 {
+            return Err(self.err_general("cannot be called from a contract"));
+        }
+
+        let salt = self.uint256_from_obj_input("salt", salt)?;
+
+        let wasm = self.visit_obj(v, |b: &Vec<u8>| {
+            Ok(ScContractCode::Wasm(
+                b.try_into()
+                    .map_err(|_| self.err_general("code too large"))?,
+            ))
+        })?;
+        let buf = self.id_preimage_from_source_account(salt)?;
+        self.create_contract_with_id_preimage(wasm, buf)
+    }
+
+    fn create_token_from_source_account(
+        &self,
+        _vmcaller: &mut VmCaller<Host>,
+        salt: Object,
+    ) -> Result<Object, HostError> {
+        let frames = self.0.context.borrow();
+        if frames.len() > 1 {
+            return Err(self.err_general("cannot be called from a contract"));
+        }
+
+        let salt = self.uint256_from_obj_input("salt", salt)?;
+
+        let buf = self.id_preimage_from_source_account(salt)?;
+        self.create_contract_with_id_preimage(ScContractCode::Token, buf)
+    }
+
+    fn create_token_from_ed25519(
+        &self,
+        vmcaller: &mut VmCaller<Host>,
+        salt: Object,
+        key: Object,
+        sig: Object,
+    ) -> Result<Object, HostError> {
+        let salt_val = self.uint256_from_obj_input("salt", salt)?;
+        let key_val = self.uint256_from_obj_input("key", key)?;
+
+        // Verify parameters
+        let params = {
+            let separator = "create_token_from_ed25519(salt: u256, key: u256, sig: Vec<u8>)";
+            [separator.as_bytes(), salt_val.as_ref()].concat()
+        };
+        // Another charge-after-work. Easier to get the num bytes this way.
+        self.charge_budget(CostType::BytesAppend, params.len() as u64)?;
+        let hash = self.compute_hash_sha256(vmcaller, self.add_host_object(params)?.into())?;
+
+        self.verify_sig_ed25519(vmcaller, hash, key, sig)?;
+
+        let buf = self.id_preimage_from_ed25519(key_val, salt_val)?;
+        self.create_contract_with_id_preimage(ScContractCode::Token, buf)
     }
 
     fn create_token_from_contract(
@@ -1848,8 +1909,27 @@ impl VmCallerCheckedEnv for Host {
     ) -> Result<Object, HostError> {
         let contract_id = self.get_current_contract_id()?;
         let salt = self.uint256_from_obj_input("salt", salt)?;
-        let id_preimage = self.id_preimage_from_contract(contract_id, salt)?;
-        self.create_contract_with_id_preimage(ScContractCode::Token, id_preimage)
+        let buf = self.id_preimage_from_contract(contract_id, salt)?;
+        self.create_contract_with_id_preimage(ScContractCode::Token, buf)
+    }
+
+    //TODO: metering
+    fn create_token_from_asset(
+        &self,
+        vmcaller: &mut VmCaller<Host>,
+        asset_bytes: Object,
+    ) -> Result<Object, HostError> {
+        let asset = self.metered_from_xdr_obj(asset_bytes)?;
+        let id_preimage = self.id_preimage_from_asset(asset)?;
+        let id = self.create_contract_with_id_preimage(ScContractCode::Token, id_preimage)?;
+        self.call_n(
+            id,
+            Symbol::from_str("init_asset"),
+            &[asset_bytes.try_into()?],
+            false,
+        )?;
+
+        Ok(id)
     }
 
     // Notes on metering: here covers the args unpacking. The actual VM work is changed at lower layers.
@@ -2518,10 +2598,14 @@ impl VmCallerCheckedEnv for Host {
         k: Object,
         s: Object,
     ) -> Result<RawVal, HostError> {
+        use ed25519_dalek::Verifier;
         let public_key = self.ed25519_pub_key_from_obj_input(k)?;
         let sig = self.signature_from_obj_input("sig", s)?;
-        let res = self.visit_obj(x, |payload: &Vec<u8>| {
-            self.verify_sig_ed25519_internal(payload, &public_key, &sig)
+        let res = self.visit_obj(x, |bytes: &Vec<u8>| {
+            self.charge_budget(CostType::VerifyEd25519Sig, bytes.len() as u64)?;
+            public_key
+                .verify(bytes, &sig)
+                .map_err(|_| self.err_general("Failed ED25519 verification"))
         });
         Ok(res?.into())
     }

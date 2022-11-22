@@ -4,6 +4,7 @@ use soroban_env_common::{
 };
 
 use crate::{
+    budget::Budget,
     events::{DebugArg, HostEvent},
     vm::Vm,
     xdr::{Hash, ScHostObjErrorCode, ScStatusType, ScVal, ScVec},
@@ -37,12 +38,16 @@ fn invoke_single_contract_function() -> Result<(), HostError> {
 
 #[test]
 fn invoke_cross_contract() -> Result<(), HostError> {
-    let host = Host::test_host_with_recording_footprint();
-    let id_obj = host.register_test_contract_wasm(ADD_I32)?;
+    let dummy_id = [0; 32];
+    let budget = Budget::default();
+    let storage =
+        Host::test_storage_with_contracts(vec![dummy_id.into()], vec![ADD_I32], budget.clone());
+    let host = Host::with_storage_and_budget(storage, budget);
+    let obj = host.test_bin_obj(&dummy_id)?;
     // prepare arguments
     let sym = Symbol::from_str("add");
     let args = host.test_vec_obj::<i32>(&[1, 2])?;
-    let res = host.call(id_obj, sym.into(), args.into())?;
+    let res = host.call(obj.to_object(), sym.into(), args.into())?;
     assert!(res.is::<i32>());
     assert!(res.get_tag() == Tag::I32);
     let i: i32 = res.try_into()?;
@@ -52,14 +57,19 @@ fn invoke_cross_contract() -> Result<(), HostError> {
 
 #[test]
 fn invoke_cross_contract_with_err() -> Result<(), HostError> {
-    let host = Host::test_host_with_recording_footprint();
-    let id_obj = host.register_test_contract_wasm(VEC)?;
+    let dummy_id = [0; 32];
+    let budget = Budget::default();
+    let storage =
+        Host::test_storage_with_contracts(vec![dummy_id.into()], vec![VEC], budget.clone());
+    let host = Host::with_storage_and_budget(storage, budget);
+
+    let obj = host.test_bin_obj(&dummy_id)?;
     // prepare arguments
     let sym = Symbol::from_str("vec_err");
     let args = host.test_vec_obj::<u32>(&[1])?;
 
     // try_call
-    let sv = host.try_call(id_obj, sym.into(), args.clone().into())?;
+    let sv = host.try_call(obj.to_object(), sym.into(), args.clone().into())?;
     let code = ScHostObjErrorCode::VecIndexOutOfBound;
     let exp_st: Status = code.into();
     assert_eq!(sv.get_payload(), exp_st.to_raw().get_payload());
@@ -93,7 +103,7 @@ fn invoke_cross_contract_with_err() -> Result<(), HostError> {
     };
 
     // call
-    let res = host.call(id_obj, sym.into(), args.into());
+    let res = host.call(obj.to_object(), sym.into(), args.into());
     assert!(HostError::result_matches_err_status(res, code));
 
     let events = host.get_events()?;
@@ -129,15 +139,23 @@ fn invoke_cross_contract_with_err() -> Result<(), HostError> {
 
 #[test]
 fn invoke_cross_contract_indirect() -> Result<(), HostError> {
-    let host = Host::test_host_with_recording_footprint();
-    let id0_obj = host.register_test_contract_wasm(INVOKE_CONTRACT)?;
-    let id1_obj = host.register_test_contract_wasm(ADD_I32)?;
+    let dummy_id0 = [0; 32]; // the calling contract
+    let dummy_id1 = [1; 32]; // the called contract
+    let budget = Budget::default();
+    let storage = Host::test_storage_with_contracts(
+        vec![dummy_id0.into(), dummy_id1.into()],
+        vec![INVOKE_CONTRACT, ADD_I32],
+        budget.clone(),
+    );
+    let host = Host::with_storage_and_budget(storage, budget);
     // prepare arguments
+    let id0_obj = host.test_bin_obj(&dummy_id0)?;
+    let id1_obj = host.test_bin_obj(&dummy_id1)?;
     let sym = Symbol::from_str("add_with");
     let args = host.test_vec_obj::<i32>(&[5, 6])?;
-    let args = host.vec_push_back(args.val, id1_obj.to_raw())?;
+    let args = host.vec_push_back(args.val, id1_obj.into())?;
     // try call
-    let val = host.call(id0_obj, sym.into(), args.clone().into())?;
+    let val = host.call(id0_obj.to_object(), sym.into(), args.clone().into())?;
     let exp: RawVal = 11i32.into();
     assert_eq!(val.get_payload(), exp.get_payload());
     Ok(())
@@ -145,15 +163,24 @@ fn invoke_cross_contract_indirect() -> Result<(), HostError> {
 
 #[test]
 fn invoke_cross_contract_indirect_err() -> Result<(), HostError> {
-    let host = Host::test_host_with_recording_footprint();
-    let id0_obj = host.register_test_contract_wasm(INVOKE_CONTRACT)?;
-    let id1_obj = host.register_test_contract_wasm(ADD_I32)?;
+    let dummy_id0 = [0; 32]; // the calling contract
+    let dummy_id1 = [1; 32]; // the called contract
+    let budget = Budget::default();
+    let storage = Host::test_storage_with_contracts(
+        vec![dummy_id0.into(), dummy_id1.into()],
+        vec![INVOKE_CONTRACT, ADD_I32],
+        budget.clone(),
+    );
+    let host = Host::with_storage_and_budget(storage, budget);
+    // prepare arguments
+    let id0_obj = host.test_bin_obj(&dummy_id0)?;
+    let id1_obj = host.test_bin_obj(&dummy_id1)?;
     let sym = Symbol::from_str("add_with");
     let args = host.test_vec_obj::<i32>(&[i32::MAX, 1])?;
     let args = host.vec_push_back(args.val, id1_obj.into())?;
 
     // try call -- add will trap, and add_with will trap, but we will get a status
-    let status = host.try_call(id0_obj, sym.into(), args.clone().into())?;
+    let status = host.try_call(id0_obj.to_object(), sym.into(), args.clone().into())?;
     let code = ScVmErrorCode::TrapUnreachable;
     let exp: Status = code.into();
     assert_eq!(status.get_payload(), exp.to_raw().get_payload());
@@ -187,7 +214,7 @@ fn invoke_cross_contract_indirect_err() -> Result<(), HostError> {
     };
 
     // call
-    let res = host.call(id0_obj, sym.into(), args.clone().into());
+    let res = host.call(id0_obj.to_object(), sym.into(), args.clone().into());
     assert!(HostError::result_matches_err_status(res, code));
 
     let events = host.get_events()?;
@@ -223,16 +250,23 @@ fn invoke_cross_contract_indirect_err() -> Result<(), HostError> {
 
 #[test]
 fn invoke_contract_with_reentry() -> Result<(), HostError> {
-    let host = Host::test_host_with_recording_footprint();
-    let id0_obj = host.register_test_contract_wasm(INVOKE_CONTRACT)?;
+    let dummy_id0 = [0; 32]; // the calling contract
+    let budget = Budget::default();
+    let storage = Host::test_storage_with_contracts(
+        vec![dummy_id0.into()],
+        vec![INVOKE_CONTRACT],
+        budget.clone(),
+    );
+    let host = Host::with_storage_and_budget(storage, budget);
     // prepare arguments
+    let id0_obj = host.test_bin_obj(&dummy_id0)?;
     let sym = Symbol::from_str("add_with");
     let args = host.test_vec_obj::<i32>(&[i32::MAX, 1])?;
     let args = host.vec_push_back(args.val, id0_obj.clone().into())?; // trying to call its own `add` function
 
     // try call -- add will trap, and add_with will trap, but we will get a status
-    let res = host.call(id0_obj.clone(), sym.into(), args.clone().into());
-    let status = host.try_call(id0_obj, sym.into(), args.clone().into())?;
+    let res = host.call(id0_obj.clone().to_object(), sym.into(), args.clone().into());
+    let status = host.try_call(id0_obj.clone().to_object(), sym.into(), args.clone().into())?;
     let code = ScHostContextErrorCode::UnknownError;
     let exp: Status = code.into();
     assert!(HostError::result_matches_err_status(res, code));
