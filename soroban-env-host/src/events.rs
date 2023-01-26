@@ -14,6 +14,7 @@ use tinyvec::TinyVec;
 pub enum HostEvent {
     Contract(ContractEvent),
     Debug(DebugEvent),
+    StructuredDebug(ContractEvent),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -35,6 +36,12 @@ impl Events {
         len as u64
     }
 
+    // Record a debug ContractEvent separate from user provided debug events.
+    // These are not part of the protocol, so they should not be metered.
+    pub fn record_structured_debug_event(&mut self, ce: ContractEvent) {
+        self.0.push(HostEvent::StructuredDebug(ce));
+    }
+
     // Records a contract HostEvent.
     // Notes on metering: this is covered by the host. See `Host::record_contract_event` for details.
     pub fn record_contract_event(&mut self, ce: ContractEvent) {
@@ -46,6 +53,7 @@ impl Events {
             match e {
                 HostEvent::Contract(e) => debug!("Contract event: {:?}", e),
                 HostEvent::Debug(e) => debug!("Debug event: {}", e),
+                HostEvent::StructuredDebug(e) => debug!("Structured Debug event: {:?}", e),
             }
         }
     }
