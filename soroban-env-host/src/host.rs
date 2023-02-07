@@ -1073,6 +1073,41 @@ impl Host {
             .verify_top_authorization(&address, &contract_id, &function_name, &args))
     }
 
+    /*  #[cfg(any(test, feature = "testutils"))]
+    pub fn get_all_authorizations(
+        &self,
+    ) -> Result<Vec<(ScAddress, Hash, Symbol, ScVec)>, HostError> {
+        Ok(self
+            .0
+            .previous_authorization_manager
+            .borrow_mut()
+            .as_mut()
+            .ok_or(self.err_general("previous invocation is missing - no auth to verify"))?
+            .get_all_authorizations())
+    } */
+
+    #[cfg(any(test, feature = "testutils"))]
+    pub fn get_all_authorizations(
+        &self,
+    ) -> Result<Vec<(ScVal, Hash, Symbol, Vec<RawVal>)>, HostError> {
+        let auths = self
+            .0
+            .previous_authorization_manager
+            .borrow_mut()
+            .as_mut()
+            .ok_or(self.err_general("previous invocation is missing - no auth to verify"))?
+            .get_all_authorizations();
+
+        let mut res = vec![];
+        for auth in auths.iter() {
+            let addr = ScVal::Object(Some(ScObject::Address(auth.0.clone())));
+            let args = self.scvals_to_rawvals(auth.3.as_slice())?;
+            res.push((addr, auth.1.clone(), auth.2, args));
+        }
+
+        Ok(res)
+    }
+
     /// Records a `System` contract event. `topics` is expected to be a `SCVec`
     /// length <= 4 that cannot contain `Vec`, `Map`, or `Bytes` with length > 32
     /// On success, returns an `SCStatus::Ok`.

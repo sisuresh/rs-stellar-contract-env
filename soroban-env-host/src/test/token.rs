@@ -2632,4 +2632,22 @@ fn test_recording_auth_for_token() {
             args.clone().into()
         )
         .unwrap());
+
+    //env.auth().all().iter().any(|a| a == (&address, &contract_id, "transfer", (500_i128,).into_val(&env)))
+
+    /* let a = test
+    .host
+    .get_all_authorizations()
+    .unwrap().first().unwrap();
+     */
+    //assert_eq!(a.0, admin.sc_address(&test.host).into());
+    assert_eq!(
+        test.host.get_all_authorizations().unwrap(),
+        vec![(
+            admin.sc_address(&test.host).into(),
+            Hash(token.id.to_array().unwrap()),
+            Symbol::from_str("mint"),
+            args.clone().into()
+        )]
+    );
 }

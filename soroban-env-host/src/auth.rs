@@ -534,6 +534,22 @@ impl AuthorizationManager {
             }
         }
     }
+
+    #[cfg(any(test, feature = "testutils"))]
+    pub(crate) fn get_all_authorizations(&self) -> Vec<(ScAddress, Hash, Symbol, ScVec)> {
+        let mut authorizations = vec![];
+        match self.mode {
+            AuthorizationMode::Enforcing => {
+                panic!("get_all_authorizations is only available for recording-mode auth")
+            }
+            AuthorizationMode::Recording(_) => {
+                for tracker in &self.trackers {
+                    tracker.get_all_authorizations(&mut authorizations);
+                }
+            }
+        }
+        authorizations
+    }
 }
 
 impl AuthorizationTracker {
@@ -899,6 +915,28 @@ impl AuthorizationTracker {
             self.root_authorized_invocation.is_exhausted = false;
         }
         is_matching
+    }
+
+    #[cfg(any(test, feature = "testutils"))]
+    fn get_all_authorizations(&self, authorizations: &mut Vec<(ScAddress, Hash, Symbol, ScVec)>) {
+        self.traverse(&self.root_authorized_invocation, authorizations)
+    }
+
+    #[cfg(any(test, feature = "testutils"))]
+    fn traverse(
+        &self,
+        invocation: &AuthorizedInvocation,
+        authorizations: &mut Vec<(ScAddress, Hash, Symbol, ScVec)>,
+    ) {
+        authorizations.push((
+            self.address.as_ref().unwrap().clone(),
+            invocation.contract_id.clone(),
+            invocation.function_name,
+            invocation.args.clone(),
+        ));
+        for sub in invocation.sub_invocations.iter() {
+            self.traverse(&sub, authorizations);
+        }
     }
 }
 

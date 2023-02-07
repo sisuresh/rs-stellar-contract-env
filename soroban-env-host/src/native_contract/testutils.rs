@@ -131,14 +131,17 @@ impl<'a> TestSigner<'a> {
         host.call_args_to_scvec(signature_args.into()).unwrap()
     }
 
-    pub(crate) fn address(&self, host: &Host) -> Address {
-        let sc_address = match self {
+    pub(crate) fn sc_address(&self, host: &Host) -> ScAddress {
+        match self {
             TestSigner::AccountInvoker(acc_id) => ScAddress::Account(acc_id.clone()),
             TestSigner::Account(acc) => ScAddress::Account(acc.account_id.clone()),
             TestSigner::AccountContract(signer) => ScAddress::Contract(signer.id.clone()),
             TestSigner::ContractInvoker(contract_id) => ScAddress::Contract(contract_id.clone()),
-        };
-        Address::try_from_val(host, &host.add_host_object(sc_address).unwrap()).unwrap()
+        }
+    }
+
+    pub(crate) fn address(&self, host: &Host) -> Address {
+        Address::try_from_val(host, &host.add_host_object(self.sc_address(host)).unwrap()).unwrap()
     }
 }
 
