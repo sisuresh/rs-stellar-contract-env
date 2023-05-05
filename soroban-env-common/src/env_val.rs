@@ -341,6 +341,9 @@ where
             }
 
             Tag::LedgerKeyContractExecutable => Ok(ScVal::LedgerKeyContractExecutable),
+
+            Tag::StorageType => Ok(ScVal::StorageType((val.get_major() as i32).try_into()?)),
+
             Tag::U64Object
             | Tag::I64Object
             | Tag::TimepointObject
@@ -426,6 +429,10 @@ where
             }
             ScVal::LedgerKeyContractExecutable => unsafe {
                 RawVal::from_body_and_tag(0, Tag::LedgerKeyContractExecutable)
+            },
+            ScVal::StorageType(_storage_type) => unsafe {
+                let major: i32 = (*_storage_type).into();
+                RawVal::from_major_minor_and_tag(major as u32, 0, Tag::StorageType)
             },
 
             ScVal::Bytes(_)

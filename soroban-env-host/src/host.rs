@@ -13,15 +13,15 @@ use crate::{
     storage::Storage,
     xdr::{
         int128_helpers, AccountId, Asset, ContractCodeEntry, ContractCostType, ContractDataEntry,
-        ContractEventType, ContractId, CreateContractArgs, ExtensionPoint, Hash, HashIdPreimage,
-        LedgerEntryData, LedgerKey, LedgerKeyContractCode, PublicKey, ScAddress, ScBytes,
-        ScContractExecutable, ScHostFnErrorCode, ScHostObjErrorCode, ScHostStorageErrorCode,
-        ScHostValErrorCode, ScStatusType, ScString, ScSymbol, ScUnknownErrorCode, ScVal,
-        UploadContractWasmArgs,
+        ContractDataType, ContractEventType, ContractId, CreateContractArgs, ExtensionPoint, Hash,
+        HashIdPreimage, LedgerEntryData, LedgerKey, LedgerKeyContractCode, PublicKey, ScAddress,
+        ScBytes, ScContractExecutable, ScHostFnErrorCode, ScHostObjErrorCode,
+        ScHostStorageErrorCode, ScHostValErrorCode, ScStatusType, ScString, ScSymbol,
+        ScUnknownErrorCode, ScVal, UploadContractWasmArgs,
     },
     AddressObject, Bool, BytesObject, I128Object, I256Object, I64Object, MapObject, Status,
-    StringObject, SymbolObject, SymbolSmall, SymbolStr, TryFromVal, U128Object, U256Object, U32Val,
-    U64Object, U64Val, VecObject, VmCaller, VmCallerEnv, Void, I256, U256,
+    StorageType, StringObject, SymbolObject, SymbolSmall, SymbolStr, TryFromVal, U128Object,
+    U256Object, U32Val, U64Object, U64Val, VecObject, VmCaller, VmCallerEnv, Void, I256, U256,
 };
 
 use crate::Vm;
@@ -41,6 +41,7 @@ pub(crate) mod metered_vector;
 pub(crate) mod metered_xdr;
 mod validity;
 pub use error::HostError;
+use soroban_env_common::xdr::MASK_CONTRACT_DATA_FLAGS_V20;
 
 use self::{frame::ContractReentryMode, metered_vector::MeteredVector};
 use self::{invoker_type::InvokerType, metered_clone::MeteredClone};
@@ -1584,18 +1585,61 @@ impl VmCallerEnv for Host {
         _vmcaller: &mut VmCaller<Host>,
         k: RawVal,
         v: RawVal,
+        t: StorageType,
+        bump_l: U32Val,
+        f: RawVal,
     ) -> Result<Void, HostError> {
-        let key = self.contract_data_key_from_rawval(k)?;
-        let data = LedgerEntryData::ContractData(ContractDataEntry {
-            contract_id: self.get_current_contract_id_internal()?,
-            key: self.from_host_val(k)?,
-            val: self.from_host_val(v)?,
-        });
-        self.0.storage.borrow_mut().put(
-            &key,
-            &Host::ledger_entry_from_data(data),
-            self.as_budget(),
-        )?;
+        let flags = if f.is_void() {
+            0
+        } else {
+            self.u32_from_rawval_input("f", f)?
+        };
+
+        if ((flags as u64) & !MASK_CONTRACT_DATA_FLAGS_V20) != 0 {
+            return Err(self.err_status_msg(ScHostFnErrorCode::InputArgsInvalid, "invalid flags"));
+        }
+
+        let storage_type: ContractDataType = t.try_into()?;
+        let key = self.contract_data_key_from_rawval(k, storage_type)?;
+        if self.0.storage.borrow_mut().has(&key, self.as_budget())? {
+            let mut current = (*self.0.storage.borrow_mut().get(&key, self.as_budget())?).clone();
+
+            match current.data {
+                LedgerEntryData::ContractData(ref mut entry) => {
+                    entry.val = self.from_host_val(v)?;
+                    if flags == 0 {
+                        entry.flags = 0;
+                    } else {
+                        entry.flags |= flags;
+                    }
+                }
+                _ => {
+                    return Err(self.err_status_msg(
+                        ScHostStorageErrorCode::ExpectContractData,
+                        "expected contract data",
+                    ))
+                }
+            }
+            self.0
+                .storage
+                .borrow_mut()
+                .put(&key, &Rc::new(current), self.as_budget())?;
+        } else {
+            let data = LedgerEntryData::ContractData(ContractDataEntry {
+                contract_id: self.get_current_contract_id_internal()?,
+                key: self.from_host_val(k)?,
+                val: self.from_host_val(v)?,
+                expiration_ledger: 0, //TODO:FIX THIS
+                flags,
+                type_: storage_type,
+            });
+            self.0.storage.borrow_mut().put(
+                &key,
+                &Host::ledger_entry_from_data(data),
+                self.as_budget(),
+            )?;
+        }
+
         Ok(RawVal::VOID)
     }
 
@@ -1604,8 +1648,9 @@ impl VmCallerEnv for Host {
         &self,
         _vmcaller: &mut VmCaller<Host>,
         k: RawVal,
+        t: StorageType,
     ) -> Result<Bool, HostError> {
-        let key = self.storage_key_from_rawval(k)?;
+        let key = self.storage_key_from_rawval(k, t.try_into()?)?;
         let res = self.0.storage.borrow_mut().has(&key, self.as_budget())?;
         Ok(RawVal::from_bool(res))
     }
@@ -1615,15 +1660,20 @@ impl VmCallerEnv for Host {
         &self,
         _vmcaller: &mut VmCaller<Host>,
         k: RawVal,
+        t: StorageType,
+        bump_l: U32Val,
     ) -> Result<RawVal, HostError> {
-        let key = self.storage_key_from_rawval(k)?;
+        let key = self.storage_key_from_rawval(k, t.try_into()?)?;
         let entry = self.0.storage.borrow_mut().get(&key, self.as_budget())?;
         match &entry.data {
             LedgerEntryData::ContractData(ContractDataEntry {
                 contract_id,
                 key,
                 val,
-            }) => Ok(self.to_host_val(val)?),
+                type_,
+                expiration_ledger,
+                flags,
+            }) => Ok(self.to_host_val(&val)?),
             _ => Err(self.err_status_msg(
                 ScHostStorageErrorCode::ExpectContractData,
                 "expected contract data",
@@ -1636,8 +1686,9 @@ impl VmCallerEnv for Host {
         &self,
         _vmcaller: &mut VmCaller<Host>,
         k: RawVal,
+        t: StorageType,
     ) -> Result<Void, HostError> {
-        let key = self.contract_data_key_from_rawval(k)?;
+        let key = self.contract_data_key_from_rawval(k, t.try_into()?)?;
         self.0.storage.borrow_mut().del(&key, self.as_budget())?;
         Ok(RawVal::VOID)
     }

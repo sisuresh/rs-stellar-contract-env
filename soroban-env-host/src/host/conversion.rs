@@ -14,8 +14,8 @@ use soroban_env_common::num::{
     i256_from_pieces, i256_into_pieces, u256_from_pieces, u256_into_pieces,
 };
 use soroban_env_common::xdr::{
-    self, int128_helpers, AccountId, Int128Parts, Int256Parts, ScBytes, ScMap, ScMapEntry,
-    UInt128Parts, UInt256Parts,
+    self, int128_helpers, AccountId, ContractDataType, Int128Parts, Int256Parts, ScBytes, ScMap,
+    ScMapEntry, UInt128Parts, UInt256Parts,
 };
 use soroban_env_common::{
     BytesObject, Convert, Object, ScValObjRef, ScValObject, TryFromVal, TryIntoVal, U32Val,
@@ -204,29 +204,49 @@ impl Host {
     /// Converts a [`RawVal`] to an [`ScVal`] and combines it with the currently-executing
     /// [`ContractID`] to produce a [`Key`], that can be used to access ledger [`Storage`].
     // Notes on metering: covered by components.
-    pub fn storage_key_from_rawval(&self, k: RawVal) -> Result<Rc<LedgerKey>, HostError> {
+    pub fn storage_key_from_rawval(
+        &self,
+        k: RawVal,
+        data_type: ContractDataType,
+    ) -> Result<Rc<LedgerKey>, HostError> {
         Ok(Rc::new(LedgerKey::ContractData(LedgerKeyContractData {
             contract_id: self.get_current_contract_id_internal()?,
             key: self.from_host_val(k)?,
+            type_: data_type,
         })))
     }
 
-    pub(crate) fn storage_key_for_contract(&self, contract_id: Hash, key: ScVal) -> Rc<LedgerKey> {
+    pub(crate) fn storage_key_for_contract(
+        &self,
+        contract_id: Hash,
+        key: ScVal,
+        data_type: ContractDataType,
+    ) -> Rc<LedgerKey> {
         Rc::new(LedgerKey::ContractData(LedgerKeyContractData {
             contract_id,
             key,
+            type_: data_type,
         }))
     }
 
-    pub fn storage_key_from_scval(&self, key: ScVal) -> Result<Rc<LedgerKey>, HostError> {
+    pub fn storage_key_from_scval(
+        &self,
+        key: ScVal,
+        data_type: ContractDataType,
+    ) -> Result<Rc<LedgerKey>, HostError> {
         Ok(Rc::new(LedgerKey::ContractData(LedgerKeyContractData {
             contract_id: self.get_current_contract_id_internal()?,
             key,
+            type_: data_type,
         })))
     }
 
     // Notes on metering: covered by components.
-    pub fn contract_data_key_from_rawval(&self, k: RawVal) -> Result<Rc<LedgerKey>, HostError> {
+    pub fn contract_data_key_from_rawval(
+        &self,
+        k: RawVal,
+        data_type: ContractDataType,
+    ) -> Result<Rc<LedgerKey>, HostError> {
         let key_scval = self.from_host_val(k)?;
         match &key_scval {
             ScVal::LedgerKeyContractExecutable => {
@@ -243,7 +263,7 @@ impl Host {
             }
             _ => (),
         };
-        self.storage_key_from_scval(key_scval)
+        self.storage_key_from_scval(key_scval, data_type)
     }
 
     /// Converts a binary search result into a u64. `res` is `Some(index)`
@@ -541,6 +561,7 @@ impl Host {
             | ScVal::Status(_)
             | ScVal::U32(_)
             | ScVal::I32(_)
+            | ScVal::StorageType(_)
             | ScVal::LedgerKeyContractExecutable => {
                 Err(self.err_status(ScHostObjErrorCode::UnexpectedType))
             }

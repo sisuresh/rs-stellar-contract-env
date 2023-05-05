@@ -298,6 +298,7 @@ impl Compare<ScVal> for Budget {
             | (ContractExecutable(_), _)
             | (Address(_), _)
             | (LedgerKeyContractExecutable, _)
+            | (StorageType(_), _)
             | (LedgerKeyNonce(_), _) => Ok(a.cmp(b)),
         }
     }
@@ -386,6 +387,7 @@ mod tests {
     use crate::xdr::ScVal;
     use crate::{Compare, Host, RawVal, Tag, TryFromVal};
     use itertools::Itertools;
+    use soroban_env_common::StorageType;
 
     #[test]
     fn test_scvec_unequal_lengths() {
@@ -736,6 +738,7 @@ mod tests {
                 &ScVal::Address(xdr::ScAddress::Contract(xdr::Hash([0; 32]))),
             )
             .unwrap(),
+            Tag::StorageType => RawVal::from(StorageType::recreatable()),
             Tag::LedgerKeyNonceObject => panic!(),
             Tag::ObjectCodeUpperBound => panic!(),
             Tag::Bad => panic!(),

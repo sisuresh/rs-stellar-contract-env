@@ -942,6 +942,7 @@ impl Host {
         let nonce_key = self.storage_key_for_contract(
             contract_id.metered_clone(self.budget_ref())?,
             nonce_key_scval,
+            xdr::ContractDataType::Recreatable,
         );
         let curr_nonce: u64 =
             if self.with_mut_storage(|storage| storage.has(&nonce_key, self.budget_ref()))? {
@@ -973,36 +974,49 @@ impl Host {
         let nonce_key = self.storage_key_for_contract(
             contract_id.metered_clone(self.budget_ref())?,
             nonce_key_scval.clone(),
+            xdr::ContractDataType::Recreatable,
         );
-        let curr_nonce: u64 =
-            if self.with_mut_storage(|storage| storage.has(&nonce_key, self.budget_ref()))? {
-                let entry =
-                    self.with_mut_storage(|storage| storage.get(&nonce_key, self.budget_ref()))?;
-                match &entry.data {
-                    LedgerEntryData::ContractData(ContractDataEntry { val, .. }) => match val {
-                        ScVal::U64(val) => *val,
-                        _ => {
-                            return Err(self.err_general("unexpected nonce entry type"));
-                        }
-                    },
-                    _ => return Err(self.err_general("unexpected missing nonce entry")),
-                }
-            } else {
-                0
+
+        if self.with_mut_storage(|storage| storage.has(&nonce_key, self.budget_ref()))? {
+            let mut entry = (*self
+                .with_mut_storage(|storage| storage.get(&nonce_key, self.budget_ref()))?)
+            .clone();
+            match entry.data {
+                LedgerEntryData::ContractData(ContractDataEntry { ref mut val, .. }) => match val {
+                    ScVal::U64(v) => {
+                        let curr_nonce = *v;
+                        *v = *v + 1;
+
+                        self.with_mut_storage(|storage| {
+                            storage.put(&nonce_key, &Rc::new(entry), self.budget_ref())
+                        })?;
+                        Ok(curr_nonce)
+                    }
+                    _ => {
+                        return Err(self.err_general("unexpected nonce entry type"));
+                    }
+                },
+                _ => return Err(self.err_general("unexpected missing nonce entry")),
+            }
+        } else {
+            let data = LedgerEntryData::ContractData(ContractDataEntry {
+                contract_id: contract_id.metered_clone(self.budget_ref())?,
+                key: nonce_key_scval,
+                val: ScVal::U64(1),
+                expiration_ledger: 0, //TODO:FIX THIS
+                flags: 0,
+                type_: xdr::ContractDataType::Recreatable,
+            });
+            let entry = LedgerEntry {
+                last_modified_ledger_seq: 0,
+                data,
+                ext: LedgerEntryExt::V0,
             };
-        let data = LedgerEntryData::ContractData(ContractDataEntry {
-            contract_id: contract_id.metered_clone(self.budget_ref())?,
-            key: nonce_key_scval,
-            val: ScVal::U64(curr_nonce + 1),
-        });
-        let entry = LedgerEntry {
-            last_modified_ledger_seq: 0,
-            data,
-            ext: LedgerEntryExt::V0,
-        };
-        self.with_mut_storage(|storage| {
-            storage.put(&nonce_key, &Rc::new(entry), self.budget_ref())
-        })?;
-        Ok(curr_nonce)
+            self.with_mut_storage(|storage| {
+                storage.put(&nonce_key, &Rc::new(entry), self.budget_ref())
+            })?;
+
+            Ok(0)
+        }
     }
 }

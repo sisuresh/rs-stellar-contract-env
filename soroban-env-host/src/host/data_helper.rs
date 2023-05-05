@@ -1,6 +1,7 @@
 use core::cmp::min;
 use std::rc::Rc;
 
+use soroban_env_common::xdr::ContractDataType;
 use soroban_env_common::Env;
 
 use crate::budget::AsBudget;
@@ -27,6 +28,7 @@ impl Host {
         Ok(Rc::new(LedgerKey::ContractData(LedgerKeyContractData {
             contract_id,
             key: ScVal::LedgerKeyContractExecutable,
+            type_: ContractDataType::Recreatable,
         })))
     }
 
@@ -88,6 +90,9 @@ impl Host {
             contract_id,
             key: ScVal::LedgerKeyContractExecutable,
             val: ScVal::ContractExecutable(executable),
+            type_: ContractDataType::Recreatable,
+            expiration_ledger: 0, //TODO:FIX THIS
+            flags: 0,
         });
         self.0.storage.borrow_mut().put(
             key,
