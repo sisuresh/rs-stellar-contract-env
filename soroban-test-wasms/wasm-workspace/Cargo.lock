@@ -853,7 +853,7 @@ dependencies = [
  "soroban-env-macros",
  "soroban-wasmi",
  "static_assertions",
- "stellar-xdr",
+ "stellar-xdr 0.0.16 (git+https://github.com/sisuresh/rs-stellar-xdr?rev=aab31c921e6d76a9311f38f90c4f9cc757260247)",
 ]
 
 [[package]]
@@ -894,7 +894,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "stellar-xdr",
+ "stellar-xdr 0.0.16 (git+https://github.com/sisuresh/rs-stellar-xdr?rev=aab31c921e6d76a9311f38f90c4f9cc757260247)",
  "syn 2.0.15",
  "thiserror",
 ]
@@ -944,7 +944,7 @@ dependencies = [
  "sha2",
  "soroban-env-common",
  "soroban-spec",
- "stellar-xdr",
+ "stellar-xdr 0.0.16 (git+https://github.com/stellar/rs-stellar-xdr?rev=53e1a9cf2335aff29305c72deb6f075e78915dad)",
  "syn 2.0.15",
 ]
 
@@ -962,7 +962,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "sha2",
- "stellar-xdr",
+ "stellar-xdr 0.0.16 (git+https://github.com/stellar/rs-stellar-xdr?rev=53e1a9cf2335aff29305c72deb6f075e78915dad)",
  "syn 2.0.15",
  "thiserror",
  "wasmparser",
@@ -1015,6 +1015,17 @@ dependencies = [
 name = "stellar-xdr"
 version = "0.0.16"
 source = "git+https://github.com/stellar/rs-stellar-xdr?rev=53e1a9cf2335aff29305c72deb6f075e78915dad#53e1a9cf2335aff29305c72deb6f075e78915dad"
+dependencies = [
+ "crate-git-revision",
+ "hex",
+ "serde",
+ "serde_with",
+]
+
+[[package]]
+name = "stellar-xdr"
+version = "0.0.16"
+source = "git+https://github.com/sisuresh/rs-stellar-xdr?rev=aab31c921e6d76a9311f38f90c4f9cc757260247#aab31c921e6d76a9311f38f90c4f9cc757260247"
 dependencies = [
  "arbitrary",
  "base64 0.13.1",
