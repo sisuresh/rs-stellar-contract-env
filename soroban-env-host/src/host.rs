@@ -1639,7 +1639,7 @@ impl VmCallerEnv for Host {
         } else {
             let body = ContractDataEntryBody::DataEntry(ContractDataEntryData {
                 val: self.from_host_val(v)?,
-                flags: 0,
+                flags,
             });
 
             let data = LedgerEntryData::ContractData(ContractDataEntry {
