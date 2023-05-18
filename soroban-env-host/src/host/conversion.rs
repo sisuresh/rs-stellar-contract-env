@@ -14,8 +14,8 @@ use soroban_env_common::num::{
     i256_from_pieces, i256_into_pieces, u256_from_pieces, u256_into_pieces,
 };
 use soroban_env_common::xdr::{
-    self, int128_helpers, AccountId, ContractDataType, Int128Parts, Int256Parts, ScBytes, ScMap,
-    ScMapEntry, UInt128Parts, UInt256Parts,
+    self, int128_helpers, AccountId, ContractDataType, Int128Parts, Int256Parts,
+    LedgerKeyContractDataBody, ScBytes, ScMap, ScMapEntry, UInt128Parts, UInt256Parts,
 };
 use soroban_env_common::{
     BytesObject, Convert, Object, ScValObjRef, ScValObject, TryFromVal, TryIntoVal, U32Val,
@@ -213,6 +213,7 @@ impl Host {
             contract_id: self.get_current_contract_id_internal()?,
             key: self.from_host_val(k)?,
             type_: data_type,
+            body: LedgerKeyContractDataBody::DataEntry,
         })))
     }
 
@@ -226,6 +227,7 @@ impl Host {
             contract_id,
             key,
             type_: data_type,
+            body: LedgerKeyContractDataBody::DataEntry,
         }))
     }
 
@@ -238,6 +240,7 @@ impl Host {
             contract_id: self.get_current_contract_id_internal()?,
             key,
             type_: data_type,
+            body: LedgerKeyContractDataBody::DataEntry,
         })))
     }
 

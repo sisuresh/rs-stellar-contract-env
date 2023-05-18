@@ -12,12 +12,14 @@ use crate::{
     num::{i256_from_pieces, i256_into_pieces, u256_from_pieces, u256_into_pieces},
     storage::Storage,
     xdr::{
-        int128_helpers, AccountId, Asset, ContractCodeEntry, ContractCostType, ContractDataEntry,
+        int128_helpers, AccountId, Asset, ContractCodeEntry, ContractCodeEntryBody,
+        ContractCostType, ContractDataEntry, ContractDataEntryBody, ContractDataEntryData,
         ContractDataType, ContractEventType, ContractId, CreateContractArgs, ExtensionPoint, Hash,
-        HashIdPreimage, LedgerEntryData, LedgerKey, LedgerKeyContractCode, PublicKey, ScAddress,
-        ScBytes, ScContractExecutable, ScHostFnErrorCode, ScHostObjErrorCode,
-        ScHostStorageErrorCode, ScHostValErrorCode, ScStatusType, ScString, ScSymbol,
-        ScUnknownErrorCode, ScVal, UploadContractWasmArgs,
+        HashIdPreimage, LedgerEntryData, LedgerKey, LedgerKeyContractCode,
+        LedgerKeyContractCodeBody, PublicKey, ScAddress, ScBytes, ScContractExecutable,
+        ScHostFnErrorCode, ScHostObjErrorCode, ScHostStorageErrorCode, ScHostValErrorCode,
+        ScStatusType, ScString, ScSymbol, ScUnknownErrorCode, ScVal, UploadContractWasmArgs,
+        MASK_CONTRACT_DATA_FLAGS_V20,
     },
     AddressObject, Bool, BytesObject, I128Object, I256Object, I64Object, MapObject, Status,
     StorageType, StringObject, SymbolObject, SymbolSmall, SymbolStr, TryFromVal, U128Object,
@@ -41,7 +43,6 @@ pub(crate) mod metered_vector;
 pub(crate) mod metered_xdr;
 mod validity;
 pub use error::HostError;
-use soroban_env_common::xdr::MASK_CONTRACT_DATA_FLAGS_V20;
 
 use self::{frame::ContractReentryMode, metered_vector::MeteredVector};
 use self::{invoker_type::InvokerType, metered_clone::MeteredClone};
@@ -451,6 +452,7 @@ impl Host {
         let hash_obj = self.add_host_object(self.scbytes_from_hash(&Hash(hash_bytes))?)?;
         let code_key = Rc::new(LedgerKey::ContractCode(LedgerKeyContractCode {
             hash: Hash(hash_bytes.metered_clone(self.budget_ref())?),
+            body: LedgerKeyContractCodeBody::DataEntry,
         }));
         if !self
             .0
@@ -458,11 +460,13 @@ impl Host {
             .borrow_mut()
             .has(&code_key, self.as_budget())?
         {
+            let body = ContractCodeEntryBody::DataEntry(args.code);
             self.with_mut_storage(|storage| {
                 let data = LedgerEntryData::ContractCode(ContractCodeEntry {
                     hash: Hash(hash_bytes),
-                    code: args.code,
+                    body,
                     ext: ExtensionPoint::V0,
+                    expiration_ledger_seq: 0, //TODO:FIX THIS?
                 });
                 storage.put(
                     &code_key,
@@ -1605,14 +1609,22 @@ impl VmCallerEnv for Host {
             let mut current = (*self.0.storage.borrow_mut().get(&key, self.as_budget())?).clone();
 
             match current.data {
-                LedgerEntryData::ContractData(ref mut entry) => {
-                    entry.val = self.from_host_val(v)?;
-                    if flags == 0 {
-                        entry.flags = 0;
-                    } else {
-                        entry.flags |= flags;
+                LedgerEntryData::ContractData(ref mut entry) => match entry.body {
+                    ContractDataEntryBody::DataEntry(ref mut data) => {
+                        data.val = self.from_host_val(v)?;
+                        if flags == 0 {
+                            data.flags = 0;
+                        } else {
+                            data.flags |= flags;
+                        }
                     }
-                }
+                    _ => {
+                        return Err(self.err_status_msg(
+                            ScHostStorageErrorCode::ExpectContractData,
+                            "expected DataEntry",
+                        ))
+                    }
+                },
                 _ => {
                     return Err(self.err_status_msg(
                         ScHostStorageErrorCode::ExpectContractData,
@@ -1625,12 +1637,16 @@ impl VmCallerEnv for Host {
                 .borrow_mut()
                 .put(&key, &Rc::new(current), self.as_budget())?;
         } else {
+            let body = ContractDataEntryBody::DataEntry(ContractDataEntryData {
+                val: self.from_host_val(v)?,
+                flags: 0,
+            });
+
             let data = LedgerEntryData::ContractData(ContractDataEntry {
                 contract_id: self.get_current_contract_id_internal()?,
                 key: self.from_host_val(k)?,
-                val: self.from_host_val(v)?,
-                expiration_ledger: 0, //TODO:FIX THIS
-                flags,
+                body,
+                expiration_ledger_seq: 0, //TODO:FIX THIS
                 type_: storage_type,
             });
             self.0.storage.borrow_mut().put(
@@ -1666,14 +1682,13 @@ impl VmCallerEnv for Host {
         let key = self.storage_key_from_rawval(k, t.try_into()?)?;
         let entry = self.0.storage.borrow_mut().get(&key, self.as_budget())?;
         match &entry.data {
-            LedgerEntryData::ContractData(ContractDataEntry {
-                contract_id,
-                key,
-                val,
-                type_,
-                expiration_ledger,
-                flags,
-            }) => Ok(self.to_host_val(&val)?),
+            LedgerEntryData::ContractData(ContractDataEntry { body, .. }) => match body {
+                ContractDataEntryBody::DataEntry(data) => Ok(self.to_host_val(&data.val)?),
+                _ => Err(self.err_status_msg(
+                    ScHostStorageErrorCode::ExpectContractData,
+                    "expected DataEntry",
+                )),
+            },
             _ => Err(self.err_status_msg(
                 ScHostStorageErrorCode::ExpectContractData,
                 "expected contract data",

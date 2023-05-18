@@ -6,12 +6,14 @@ use soroban_env_common::Env;
 
 use crate::budget::AsBudget;
 use crate::xdr::{
-    AccountEntry, AccountId, Asset, ContractCodeEntry, ContractDataEntry, Hash, HashIdPreimage,
-    HashIdPreimageContractId, HashIdPreimageCreateContractArgs, HashIdPreimageEd25519ContractId,
-    HashIdPreimageFromAsset, HashIdPreimageSourceAccountContractId, LedgerEntry, LedgerEntryData,
-    LedgerEntryExt, LedgerKey, LedgerKeyAccount, LedgerKeyContractCode, LedgerKeyContractData,
-    LedgerKeyTrustLine, PublicKey, ScContractExecutable, ScHostStorageErrorCode,
-    ScHostValErrorCode, ScVal, Signer, SignerKey, ThresholdIndexes, TrustLineAsset, Uint256,
+    AccountEntry, AccountId, Asset, BytesM, ContractCodeEntryBody, ContractDataEntry,
+    ContractDataEntryBody, ContractDataEntryData, Hash, HashIdPreimage, HashIdPreimageContractId,
+    HashIdPreimageCreateContractArgs, HashIdPreimageEd25519ContractId, HashIdPreimageFromAsset,
+    HashIdPreimageSourceAccountContractId, LedgerEntry, LedgerEntryData, LedgerEntryExt, LedgerKey,
+    LedgerKeyAccount, LedgerKeyContractCode, LedgerKeyContractCodeBody, LedgerKeyContractData,
+    LedgerKeyContractDataBody, LedgerKeyTrustLine, PublicKey, ScContractExecutable,
+    ScHostStorageErrorCode, ScHostValErrorCode, ScVal, Signer, SignerKey, ThresholdIndexes,
+    TrustLineAsset, Uint256,
 };
 use crate::{Host, HostError};
 
@@ -29,6 +31,7 @@ impl Host {
             contract_id,
             key: ScVal::LedgerKeyContractExecutable,
             type_: ContractDataType::Recreatable,
+            body: LedgerKeyContractDataBody::DataEntry,
         })))
     }
 
@@ -39,12 +42,15 @@ impl Host {
     ) -> Result<ScContractExecutable, HostError> {
         let entry = self.0.storage.borrow_mut().get(key, self.as_budget())?;
         match &entry.data {
-            LedgerEntryData::ContractData(ContractDataEntry { val, .. }) => match val {
-                ScVal::ContractExecutable(code) => Ok(code.clone()),
-                _ => Err(self.err_status_msg(
-                    ScHostValErrorCode::UnexpectedValType,
-                    "ledger entry for contract code does not contain contract executable",
-                )),
+            LedgerEntryData::ContractData(ContractDataEntry { body, .. }) => match body {
+                ContractDataEntryBody::DataEntry(data) => match &data.val {
+                    ScVal::ContractExecutable(code) => Ok(code.clone()),
+                    _ => Err(self.err_status_msg(
+                        ScHostValErrorCode::UnexpectedValType,
+                        "ledger entry for contract code does not contain contract executable",
+                    )),
+                },
+                _ => Err(self.err_status(ScHostStorageErrorCode::ExpectContractData)),
             },
             _ => Err(self.err_status(ScHostStorageErrorCode::ExpectContractData)),
         }
@@ -54,13 +60,14 @@ impl Host {
         let wasm_hash = wasm_hash.metered_clone(self.as_budget())?;
         Ok(Rc::new(LedgerKey::ContractCode(LedgerKeyContractCode {
             hash: wasm_hash,
+            body: LedgerKeyContractCodeBody::DataEntry,
         })))
     }
 
     pub(crate) fn retrieve_wasm_from_storage(
         &self,
         wasm_hash: &Hash,
-    ) -> Result<ContractCodeEntry, HostError> {
+    ) -> Result<BytesM<256000>, HostError> {
         let key = self.wasm_ledger_key(wasm_hash)?;
         match &self
             .0
@@ -69,7 +76,10 @@ impl Host {
             .get(&key, self.as_budget())?
             .data
         {
-            LedgerEntryData::ContractCode(e) => Ok(e.clone()),
+            LedgerEntryData::ContractCode(e) => match &e.body {
+                ContractCodeEntryBody::DataEntry(code) => Ok(code.clone()),
+                _ => Err(self.err_status(ScHostStorageErrorCode::ExpectContractData)),
+            },
             _ => Err(self.err_status(ScHostStorageErrorCode::AccessToUnknownEntry)),
         }
     }
@@ -86,13 +96,16 @@ impl Host {
         contract_id: Hash,
         key: &Rc<LedgerKey>,
     ) -> Result<(), HostError> {
+        let body = ContractDataEntryBody::DataEntry(ContractDataEntryData {
+            val: ScVal::ContractExecutable(executable),
+            flags: 0,
+        });
         let data = LedgerEntryData::ContractData(ContractDataEntry {
             contract_id,
             key: ScVal::LedgerKeyContractExecutable,
-            val: ScVal::ContractExecutable(executable),
+            body,
             type_: ContractDataType::Recreatable,
-            expiration_ledger: 0, //TODO:FIX THIS
-            flags: 0,
+            expiration_ledger_seq: 0, //TODO:FIX THIS
         });
         self.0.storage.borrow_mut().put(
             key,

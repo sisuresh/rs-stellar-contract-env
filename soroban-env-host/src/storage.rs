@@ -292,6 +292,8 @@ impl Storage {
 #[cfg(test)]
 mod test_footprint {
 
+    use soroban_env_common::xdr::LedgerKeyContractDataBody;
+
     use super::*;
     use crate::budget::Budget;
     use crate::xdr::{ContractDataType, LedgerKeyContractData, ScVal};
@@ -303,10 +305,12 @@ mod test_footprint {
         let mut fp = Footprint::default();
         // record when key not exist
         let contract_id = [0; 32].into();
+
         let key = Rc::new(LedgerKey::ContractData(LedgerKeyContractData {
             contract_id,
             key: ScVal::I32(0),
             type_: ContractDataType::Recreatable,
+            body: LedgerKeyContractDataBody::DataEntry,
         }));
         fp.record_access(&key, AccessType::ReadOnly, &budget)?;
         assert_eq!(fp.0.contains_key::<LedgerKey>(&key, &budget)?, true);
@@ -336,6 +340,7 @@ mod test_footprint {
             contract_id,
             key: ScVal::I32(0),
             type_: ContractDataType::Recreatable,
+            body: LedgerKeyContractDataBody::DataEntry,
         }));
         let om = [(Rc::clone(&key), AccessType::ReadOnly)].into();
         let mom = MeteredOrdMap::from_map(om, &budget)?;
@@ -357,6 +362,7 @@ mod test_footprint {
             contract_id,
             key: ScVal::I32(0),
             type_: ContractDataType::Recreatable,
+            body: LedgerKeyContractDataBody::DataEntry,
         }));
         let res = fp.enforce_access(&key, AccessType::ReadOnly, &budget);
         assert!(HostError::result_matches_err_status(
@@ -374,6 +380,7 @@ mod test_footprint {
             contract_id,
             key: ScVal::I32(0),
             type_: ContractDataType::Recreatable,
+            body: LedgerKeyContractDataBody::DataEntry,
         }));
         let om = [(Rc::clone(&key), AccessType::ReadOnly)].into();
         let mom = MeteredOrdMap::from_map(om, &budget)?;

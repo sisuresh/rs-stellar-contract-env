@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use soroban_env_common::xdr::{
-    ContractAuth, ContractDataEntry, HashIdPreimage, HashIdPreimageContractAuth, LedgerEntry,
-    LedgerEntryData, LedgerEntryExt, ScAddress, ScHostAuthErrorCode, ScNonceKey, ScSymbol, ScVal,
+    ContractAuth, ContractDataEntry, ContractDataEntryBody, ContractDataEntryData, HashIdPreimage,
+    HashIdPreimageContractAuth, LedgerEntry, LedgerEntryData, LedgerEntryExt, ScAddress,
+    ScHostAuthErrorCode, ScNonceKey, ScSymbol, ScVal,
 };
 use soroban_env_common::RawVal;
 
@@ -949,10 +950,15 @@ impl Host {
                 let entry =
                     self.with_mut_storage(|storage| storage.get(&nonce_key, self.budget_ref()))?;
                 match &entry.data {
-                    LedgerEntryData::ContractData(ContractDataEntry { val, .. }) => match val {
-                        ScVal::U64(val) => *val,
+                    LedgerEntryData::ContractData(data_entry) => match &data_entry.body {
+                        ContractDataEntryBody::DataEntry(data) => match data.val {
+                            ScVal::U64(val) => val,
+                            _ => {
+                                return Err(self.err_general("unexpected nonce entry type"));
+                            }
+                        },
                         _ => {
-                            return Err(self.err_general("unexpected nonce entry type"));
+                            return Err(self.err_general("expected DataEntry"));
                         }
                     },
                     _ => return Err(self.err_general("unexpected missing nonce entry")),
@@ -982,29 +988,38 @@ impl Host {
                 .with_mut_storage(|storage| storage.get(&nonce_key, self.budget_ref()))?)
             .clone();
             match entry.data {
-                LedgerEntryData::ContractData(ContractDataEntry { ref mut val, .. }) => match val {
-                    ScVal::U64(v) => {
-                        let curr_nonce = *v;
-                        *v = *v + 1;
+                LedgerEntryData::ContractData(ref mut data_entry) => match data_entry.body {
+                    ContractDataEntryBody::DataEntry(ref mut data) => match &mut data.val {
+                        ScVal::U64(v) => {
+                            let curr_nonce = *v;
+                            *v = *v + 1;
 
-                        self.with_mut_storage(|storage| {
-                            storage.put(&nonce_key, &Rc::new(entry), self.budget_ref())
-                        })?;
-                        Ok(curr_nonce)
-                    }
+                            self.with_mut_storage(|storage| {
+                                storage.put(&nonce_key, &Rc::new(entry), self.budget_ref())
+                            })?;
+                            Ok(curr_nonce)
+                        }
+                        _ => {
+                            return Err(self.err_general("unexpected nonce entry type"));
+                        }
+                    },
                     _ => {
-                        return Err(self.err_general("unexpected nonce entry type"));
+                        return Err(self.err_general("expected DataEntry"));
                     }
                 },
                 _ => return Err(self.err_general("unexpected missing nonce entry")),
             }
         } else {
+            let body = ContractDataEntryBody::DataEntry(ContractDataEntryData {
+                val: ScVal::U64(1),
+                flags: 0,
+            });
+
             let data = LedgerEntryData::ContractData(ContractDataEntry {
                 contract_id: contract_id.metered_clone(self.budget_ref())?,
                 key: nonce_key_scval,
-                val: ScVal::U64(1),
-                expiration_ledger: 0, //TODO:FIX THIS
-                flags: 0,
+                body,
+                expiration_ledger_seq: 0, //TODO:FIX THIS
                 type_: xdr::ContractDataType::Recreatable,
             });
             let entry = LedgerEntry {
