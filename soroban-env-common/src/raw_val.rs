@@ -97,8 +97,11 @@ pub enum Tag {
     /// [stellar_xdr::ScVal::LedgerKeyContractExecutable]
     LedgerKeyContractExecutable = 15,
 
+    /// Tag for a [RawVal] that corresponds to [stellar_xdr::ScVal::StorageType]
+    StorageType = 16,
+
     /// Code delimiting the upper boundary of "small" types.
-    SmallCodeUpperBound = 16,
+    SmallCodeUpperBound = 17,
 
     /// Tag reserved to indicate boundary between tags for "small" types with
     /// their payload packed into the remaining 56 bits of the [RawVal] and
@@ -229,6 +232,7 @@ impl Tag {
             Tag::AddressObject => Some(ScValType::Address),
             Tag::LedgerKeyNonceObject => Some(ScValType::LedgerKeyNonce),
             Tag::ObjectCodeUpperBound => None,
+            Tag::StorageType => Some(ScValType::StorageType),
             Tag::Bad => None,
         }
     }
@@ -518,6 +522,18 @@ impl From<&ScError> for RawVal {
     }
 }
 
+/* impl From<ScInitialLifetime> for RawVal {
+    fn from(st: ScInitialLifetime) -> Self {
+        unsafe { InitialLifetime::from_major_minor(st as u32, 0).to_raw() }
+    }
+}
+
+impl From<&ScInitialLifetime> for RawVal {
+    fn from(st: &ScInitialLifetime) -> Self {
+        unsafe { InitialLifetime::from_major_minor(*st as u32, 0).to_raw() }
+    }
+} */
+
 // Utility methods
 
 impl RawVal {
@@ -702,6 +718,7 @@ impl Debug for RawVal {
             Tag::ContractExecutableObject => fmt_obj("ContractCode", self, f),
             Tag::AddressObject => fmt_obj("Address", self, f),
             Tag::LedgerKeyNonceObject => fmt_obj("LedgerKeyAddressNonce", self, f),
+            Tag::StorageType => write!(f, "StorageType({})", self.get_body()),
 
             Tag::Bad
             | Tag::SmallCodeUpperBound
