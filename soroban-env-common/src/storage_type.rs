@@ -15,20 +15,14 @@ impl StorageType {
         self.as_raw().get_major()
     }
 
-    #[inline(always)]
-    pub const fn temporary() -> Self {
-        unsafe { StorageType::from_major_minor(ContractDataType::Temporary as u32, 0) }
-    }
+    pub const TEMPORARY: StorageType =
+        unsafe { StorageType::from_major_minor(ContractDataType::Temporary as u32, 0) };
 
-    #[inline(always)]
-    pub const fn recreatable() -> Self {
-        unsafe { StorageType::from_major_minor(ContractDataType::Recreatable as u32, 0) }
-    }
+    pub const RECREATABLE: StorageType =
+        unsafe { StorageType::from_major_minor(ContractDataType::Recreatable as u32, 0) };
 
-    #[inline(always)]
-    pub const fn unique() -> Self {
-        unsafe { StorageType::from_major_minor(ContractDataType::Unique as u32, 0) }
-    }
+    pub const UNIQUE: StorageType =
+        unsafe { StorageType::from_major_minor(ContractDataType::Unique as u32, 0) };
 }
 
 impl TryFrom<StorageType> for ContractDataType {

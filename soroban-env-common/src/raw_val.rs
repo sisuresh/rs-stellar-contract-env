@@ -522,18 +522,6 @@ impl From<&ScError> for RawVal {
     }
 }
 
-/* impl From<ScInitialLifetime> for RawVal {
-    fn from(st: ScInitialLifetime) -> Self {
-        unsafe { InitialLifetime::from_major_minor(st as u32, 0).to_raw() }
-    }
-}
-
-impl From<&ScInitialLifetime> for RawVal {
-    fn from(st: &ScInitialLifetime) -> Self {
-        unsafe { InitialLifetime::from_major_minor(*st as u32, 0).to_raw() }
-    }
-} */
-
 // Utility methods
 
 impl RawVal {

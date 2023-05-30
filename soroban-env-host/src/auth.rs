@@ -1054,7 +1054,7 @@ impl Host {
         let nonce_key = self.storage_key_for_contract(
             contract_id,
             nonce_key_scval.metered_clone(self.budget_ref())?,
-            xdr::ContractDataType::Recreatable,
+            xdr::ContractDataType::Unique,
         );
         let curr_nonce: u64 =
             if self.with_mut_storage(|storage| storage.has(&nonce_key, self.budget_ref()))? {
@@ -1121,7 +1121,7 @@ impl Host {
         let nonce_key = self.storage_key_for_contract(
             contract_id.metered_clone(self.budget_ref())?,
             nonce_key_scval.metered_clone(self.budget_ref())?,
-            xdr::ContractDataType::Recreatable,
+            xdr::ContractDataType::Unique,
         );
 
         if self.with_mut_storage(|storage| storage.has(&nonce_key, self.budget_ref()))? {
