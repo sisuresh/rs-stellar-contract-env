@@ -768,11 +768,7 @@ dependencies = [
  "soroban-env-macros",
  "soroban-wasmi",
  "static_assertions",
-<<<<<<< HEAD
- "stellar-xdr 0.0.16 (git+https://github.com/stellar/rs-stellar-xdr?rev=979c0a5dbae204a2efe7bf52c1229081f685c2a0)",
-=======
  "stellar-xdr",
->>>>>>> 683c876 (Update storage interface for state expiration)
 ]
 
 [[package]]
@@ -813,13 +809,8 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
-<<<<<<< HEAD
- "stellar-xdr 0.0.16 (git+https://github.com/stellar/rs-stellar-xdr?rev=979c0a5dbae204a2efe7bf52c1229081f685c2a0)",
- "syn 2.0.16",
-=======
  "stellar-xdr",
- "syn 2.0.15",
->>>>>>> 683c876 (Update storage interface for state expiration)
+ "syn 2.0.16",
  "thiserror",
 ]
 
@@ -869,13 +860,8 @@ dependencies = [
  "sha2",
  "soroban-env-common",
  "soroban-spec",
-<<<<<<< HEAD
- "stellar-xdr 0.0.16 (git+https://github.com/stellar/rs-stellar-xdr?rev=b283ec0bcb791610013107b9eab7d7ff07a65db1)",
- "syn 2.0.16",
-=======
  "stellar-xdr",
- "syn 2.0.15",
->>>>>>> 683c876 (Update storage interface for state expiration)
+ "syn 2.0.16",
 ]
 
 [[package]]
@@ -892,13 +878,8 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "sha2",
-<<<<<<< HEAD
- "stellar-xdr 0.0.16 (git+https://github.com/stellar/rs-stellar-xdr?rev=b283ec0bcb791610013107b9eab7d7ff07a65db1)",
- "syn 2.0.16",
-=======
  "stellar-xdr",
- "syn 2.0.15",
->>>>>>> 683c876 (Update storage interface for state expiration)
+ "syn 2.0.16",
  "thiserror",
  "wasmparser",
 ]
@@ -949,25 +930,10 @@ dependencies = [
 [[package]]
 name = "stellar-xdr"
 version = "0.0.16"
-<<<<<<< HEAD
-source = "git+https://github.com/stellar/rs-stellar-xdr?rev=979c0a5dbae204a2efe7bf52c1229081f685c2a0#979c0a5dbae204a2efe7bf52c1229081f685c2a0"
+source = "git+https://github.com/sisuresh/rs-stellar-xdr?rev=41327e36db4a7c7a2f9874cf738fd6775776dd9e#41327e36db4a7c7a2f9874cf738fd6775776dd9e"
 dependencies = [
  "arbitrary",
  "base64 0.13.1",
- "crate-git-revision",
- "hex",
- "serde",
- "serde_with",
-]
-
-[[package]]
-name = "stellar-xdr"
-version = "0.0.16"
-source = "git+https://github.com/stellar/rs-stellar-xdr?rev=b283ec0bcb791610013107b9eab7d7ff07a65db1#b283ec0bcb791610013107b9eab7d7ff07a65db1"
-=======
-source = "git+https://github.com/sisuresh/rs-stellar-xdr?rev=63885f204a089b926cf33862cc96dd0d97bfdd09#63885f204a089b926cf33862cc96dd0d97bfdd09"
->>>>>>> 683c876 (Update storage interface for state expiration)
-dependencies = [
  "crate-git-revision",
  "hex",
  "serde",
