@@ -1,19 +1,23 @@
 [package]
-name = "soroban-write-upgrade-bytes-contract"
+name = "write_upgrade_bytes_contract"
 version = "0.0.0"
 authors = ["Stellar Development Foundation <info@stellar.org>"]
 license = "Apache-2.0"
 edition = "2021"
 publish = false
-rust-version.workspace = true
+rust-version = "1.74.0"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 doctest = false
 
-[dependencies]
-soroban-sdk = { workspace = true }
-soroban-env-common = { workspace = true }
+[dependencies.soroban-sdk]
+version = "=20.3.0"
+git = "https://github.com/stellar/rs-soroban-sdk"
+
+[dependencies.soroban-env-common]
+version = "=20.2.2"
+git = "https://github.com/stellar/rs-soroban-env"
 
 [features]
 next = ["soroban-env-common/next"]
