@@ -32,6 +32,9 @@ num-integer = "=0.1.45"
 num-derive = "=0.4.1"
 backtrace = { version = "=0.3.69", optional = true }
 k256 = {version = "=0.13.1", features=["ecdsa", "arithmetic"]}
+ecdsa = {version = "=0.16.7", default-features = false}
+sec1 = {version = "=0.7.2"}
+elliptic-curve ={ version = "0.13.5", default-features = false}
 # NB: getrandom is a transitive dependency of k256 which we're not using directly
 # but we have to specify it here in order to enable its 'js' feature which
 # is needed to build the host for wasm (a rare but supported config).
