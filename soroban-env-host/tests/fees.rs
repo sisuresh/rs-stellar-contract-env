@@ -107,7 +107,7 @@ fn resource_fee_computation_with_single_resource() {
             }),
             &fee_config,
         ),
-        (2000 * 1 + BASE_HISTORICAL_FEE, 0)
+        (2000 + BASE_HISTORICAL_FEE, 0)
     );
     assert_eq!(
         compute_transaction_resource_fee(
@@ -450,7 +450,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // Minimal size
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 1,
                 new_size_bytes: 1,
@@ -469,7 +469,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // Minimal ledgers
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 10 * 1024,
                 new_size_bytes: 10 * 1024,
@@ -487,7 +487,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // Minimal ledgers & size
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 1,
                 new_size_bytes: 1,
@@ -505,7 +505,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // No size change
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 10 * 1024,
                 new_size_bytes: 10 * 1024,
@@ -523,7 +523,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // Size decrease
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 10 * 1024,
                 new_size_bytes: 5 * 1024,
@@ -541,7 +541,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // Temp storage rate
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: false,
                 old_size_bytes: 10 * 1024,
                 new_size_bytes: 10 * 1024,
@@ -559,8 +559,7 @@ fn test_rent_extend_fees_with_only_extend() {
     // Multiple entries
     assert_eq!(
         compute_rent_fee(
-            &vec![
-                LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                     is_persistent: false,
                     old_size_bytes: 10 * 1024,
                     new_size_bytes: 10 * 1024,
@@ -601,8 +600,7 @@ fn test_rent_extend_fees_with_only_extend() {
                     new_size_bytes: 10 * 1024,
                     old_live_until_ledger: 100_000,
                     new_live_until_ledger: 300_000,
-                },
-            ],
+                }],
             &fee_config,
             50_000,
         ),
@@ -625,7 +623,7 @@ fn test_rent_extend_fees_with_only_size_change() {
     // Large size increase
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 1,
                 new_size_bytes: 100_000,
@@ -642,7 +640,7 @@ fn test_rent_extend_fees_with_only_size_change() {
     // Large size increase, temp storage
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: false,
                 old_size_bytes: 1,
                 new_size_bytes: 100_000,
@@ -659,7 +657,7 @@ fn test_rent_extend_fees_with_only_size_change() {
     // Small size increase
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 99_999,
                 new_size_bytes: 100_000,
@@ -676,7 +674,7 @@ fn test_rent_extend_fees_with_only_size_change() {
     // Small ledger difference
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 1,
                 new_size_bytes: 100_000,
@@ -693,8 +691,7 @@ fn test_rent_extend_fees_with_only_size_change() {
     // Multiple entries
     assert_eq!(
         compute_rent_fee(
-            &vec![
-                LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                     is_persistent: true,
                     old_size_bytes: 1,
                     new_size_bytes: 100_000,
@@ -707,8 +704,7 @@ fn test_rent_extend_fees_with_only_size_change() {
                     new_size_bytes: 100_000,
                     old_live_until_ledger: 100_000,
                     new_live_until_ledger: 100_000,
-                },
-            ],
+                }],
             &fee_config,
             25_000,
         ),
@@ -729,7 +725,7 @@ fn test_rent_extend_with_size_change_and_extend() {
     // Persistent entry
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 1,
                 new_size_bytes: 100_000,
@@ -748,7 +744,7 @@ fn test_rent_extend_with_size_change_and_extend() {
     // Temp entry
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: false,
                 old_size_bytes: 1,
                 new_size_bytes: 100_000,
@@ -767,8 +763,7 @@ fn test_rent_extend_with_size_change_and_extend() {
     // Multiple entries
     assert_eq!(
         compute_rent_fee(
-            &vec![
-                LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                     is_persistent: true,
                     old_size_bytes: 1,
                     new_size_bytes: 100_000,
@@ -781,8 +776,7 @@ fn test_rent_extend_with_size_change_and_extend() {
                     new_size_bytes: 100_000,
                     old_live_until_ledger: 100_000,
                     new_live_until_ledger: 300_000,
-                },
-            ],
+                }],
             &fee_config,
             25_000,
         ),
@@ -795,7 +789,7 @@ fn test_rent_extend_with_size_change_and_extend() {
     // Small increments
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 1,
                 new_size_bytes: 2,
@@ -824,7 +818,7 @@ fn test_rent_extend_without_old_entry() {
     // Persistent storage
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: true,
                 old_size_bytes: 0,
                 new_size_bytes: 100_000,
@@ -842,7 +836,7 @@ fn test_rent_extend_without_old_entry() {
     // Temp storage
     assert_eq!(
         compute_rent_fee(
-            &vec![LedgerEntryRentChange {
+            &[LedgerEntryRentChange {
                 is_persistent: false,
                 old_size_bytes: 0,
                 new_size_bytes: 100_000,

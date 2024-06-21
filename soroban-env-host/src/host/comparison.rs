@@ -567,7 +567,7 @@ mod tests {
 
         let iter = pairs_xdr_sorted
             .into_iter()
-            .zip(pairs_host_sorted.into_iter());
+            .zip(pairs_host_sorted);
 
         for ((xdr1, _), (xdr2, _)) in iter {
             assert_eq!(xdr1, xdr2);
